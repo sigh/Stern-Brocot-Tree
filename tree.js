@@ -1,11 +1,8 @@
-let canvas = document.getElementById('tree-vis');
-
 class Renderer {
-  constructor(canvas, ctx, scale, origin) {
+  constructor(canvas, viewport) {
     this._canvas = canvas;
-    this._ctx = ctx;
-    this._scale = scale;
-    this._origin = origin;
+    this._ctx = canvas.getContext('2d');
+    this._viewport = viewport;
   }
 
   clearCanvas() {
@@ -15,16 +12,18 @@ class Renderer {
   drawNode(x, y, d, text) {
     const height = this._canvas.height;
     const width = this._canvas.width;
+    const scale = this._viewport.scale;
+    const origin = this._viewport.origin;
 
-    const textScale = Math.pow(2, -d) * this._scale;
+    const textScale = Math.pow(2, -d) * scale;
     const fontSize = Math.floor(textScale/4 * height);
 
-    x = this._canvas.width * this._scale * (x - this._origin.x);
-    y = this._canvas.height * this._scale * (1-(y-this._origin.y));
+    x = this._canvas.width * scale * (x - origin.x);
+    y = this._canvas.height * scale * (1-y - origin.y);
 
     // TODO: Get rid of this hacky optimization.
     if (x >= -width && y >= -height && x < width * 2 && y < height * 2) {
-      this._ctx.font = `${fontSize}px sans`;
+      this._ctx.font = `${fontSize}px Serif`;
       this._ctx.textAlign = 'center';
       this._ctx.fillText(text, x, y);
     }
@@ -33,8 +32,7 @@ class Renderer {
   }
 }
 
-const drawTree = (ctx, origin, scale) => {
-  let renderer = new Renderer(canvas, ctx, scale, origin);
+const drawTree = (renderer) => {
   renderer.clearCanvas();
 
   let drawTreeRec = (x, y, d, a, b) => {
@@ -51,44 +49,13 @@ const drawTree = (ctx, origin, scale) => {
   };
   drawTreeRec(0.5, 0.75, 0, [0,1], [1,0]);
 };
-drawTree(canvas.getContext('2d'), {x:0, y:0}, 1);
-
-const deferUntilAnimationFrame = (fn) => {
-  let lastArgs = null;
-  let promise = null;
-  let alreadyEnqueued = false;
-  return ((...args) => {
-    lastArgs = args;
-
-    if (!alreadyEnqueued) {
-      alreadyEnqueued = true;
-      promise = new Promise((resolve) => {
-        window.requestAnimationFrame(() => {
-          try {
-            fn(...lastArgs);
-          } finally {
-            resolve();
-            lastArgs = null;
-            promise = null;
-            alreadyEnqueued = false;
-          }
-        });
-      });
-    }
-
-    return promise;
-  });
-};
-
-const redraw = deferUntilAnimationFrame((scale, origin) => {
-  let ctx = canvas.getContext('2d');
-  drawTree(ctx, scale, origin);
-});
 
 class Viewport {
-  constructor(canvas) {
+  constructor(canvas, onUpdate) {
+    this._onUpdate = onUpdate;
     this._logScale = 0;
-    this._origin = {x: 0, y: 0};
+    this.scale = 1;
+    this.origin = {x: 0, y: 0};
 
     this._canvas = canvas;
 
@@ -98,14 +65,14 @@ class Viewport {
 
   _setUpMouseDrag(canvas) {
     let dragPos = {x: 0, y:0};
-    let origin = this._origin;
+    let origin = this.origin;
 
     const mouseMoveHandler = (e) => {
       const pixelScale = this._pixelScale();
       const dx = pixelScale * (e.clientX - dragPos.x);
       const dy = pixelScale * (e.clientY - dragPos.y);
       origin.x -= dx;
-      origin.y += dy;
+      origin.y -= dy;
       dragPos.x = e.clientX;
       dragPos.y = e.clientY;
       this._update();
@@ -122,7 +89,7 @@ class Viewport {
   }
 
   _setUpMouseWheel(canvas) {
-    let origin = this._origin;
+    let origin = this.origin;
 
     canvas.onwheel = (e) => {
       e.preventDefault();
@@ -142,6 +109,7 @@ class Viewport {
       ds = Math.max(ds, -this._logScale);
 
       this._logScale += ds;
+      this.scale = Math.pow(2, this._logScale);
 
       pixelScale = this._pixelScale();
       dx -= pixelScale * canvasX;
@@ -149,14 +117,14 @@ class Viewport {
 
       // TODO: Figure out a simpler expression for dx and dy.
       origin.x += dx;
-      origin.y -= dy;
+      origin.y += dy;
 
       this._update();
     };
   }
 
   _pixelScale() {
-    return Math.pow(2, -this._logScale) / (this._canvas.clientHeight);
+    return 1 / this.scale / this._canvas.clientHeight;
   }
 
   _canvasOrigin() {
@@ -165,8 +133,38 @@ class Viewport {
   }
 
   _update() {
-    redraw(this._origin, Math.pow(2, this._logScale));
+    this._onUpdate();
+  }
+
+  clientXYToCoord(clientX, clientY) {
+    const canvasOrigin = this._canvasOrigin();
+    const canvasX = clientX - canvasOrigin.x;
+    const canvasY = clientY - canvasOrigin.y;
+    const pixelScale = this._pixelScale();
+
+    return {x: this.origin.x + pixelScale*canvasX,
+            y: this.origin.y + pixelScale*canvasY};
   }
 }
 
-let viewport = new Viewport(canvas);
+const main = () => {
+  let canvas = document.getElementById('tree-vis');
+  let debugDiv = document.getElementById('debug-info');
+
+  let renderer = null;
+  const redraw = deferUntilAnimationFrame(() => {
+    drawTree(renderer);
+  });
+
+  let viewport = new Viewport(canvas, redraw);
+
+  renderer = new Renderer(canvas, viewport);
+  redraw();
+
+  canvas.onmousemove = (e) => {
+    let coord = viewport.clientXYToCoord(e.clientX, e.clientY);
+    debugDiv.textContent = `(${coord.x.toFixed(5)}, ${coord.y.toFixed(5)})`;
+  };
+};
+main();
+
