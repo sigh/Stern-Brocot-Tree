@@ -1,7 +1,11 @@
 class Renderer {
   constructor(canvas, viewport) {
     this._canvas = canvas;
+
     this._ctx = canvas.getContext('2d');
+    this._ctx.textAlign = 'center';
+    this._ctx.textBaseline = 'middle';
+
     this._viewport = viewport;
   }
 
@@ -9,45 +13,54 @@ class Renderer {
     this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
   };
 
-  drawNode(x, y, d, text) {
+  drawNode(d, i, text) {
     const height = this._canvas.height;
     const width = this._canvas.width;
     const scale = this._viewport.scale;
     const origin = this._viewport.origin;
 
-    const textScale = Math.pow(2, -d) * scale;
-    const fontSize = Math.floor(textScale/4 * height);
+    let xMin = i * Math.pow(2, -d);
+    let xMax = xMin + Math.pow(2, -d);
+    if (scale * (xMin - origin.x) >= 1 || scale * (xMax - origin.x) <= 0) {
+      // This entire subtree is outside of the viewport, so stop.
+      return false;
+    }
 
-    x = this._canvas.width * scale * (x - origin.x);
-    y = this._canvas.height * scale * (1-y - origin.y);
+    let yMin = Math.pow(2, -d-1);
+    const yMinCoord = scale*(1-yMin-origin.y);
 
-    // TODO: Get rid of this hacky optimization.
-    if (x >= -width && y >= -height && x < width * 2 && y < height * 2) {
+    const textScale = Math.pow(2, -d-1) * scale * 0.5;
+    const fontSize = Math.floor(textScale * height);
+
+    if (yMinCoord > 0) {
+      let x = xMin + Math.pow(2, -d-1);
+      x = this._canvas.width * scale * (x - origin.x);
+      let y = yMin + Math.pow(2, -d-2);
+      y = this._canvas.height * scale * (1-y - origin.y);
+
       this._ctx.font = `${fontSize}px Serif`;
-      this._ctx.textAlign = 'center';
       this._ctx.fillText(text, x, y);
     }
 
-    return fontSize;
+    // Don't continue further if:
+    //  - The text will become too small to show.
+    //  - We are past the bottom of the viewport.
+    return (fontSize >= 2) && (yMinCoord < 1);
   }
 }
 
 const drawTree = (renderer) => {
   renderer.clearCanvas();
 
-  let drawTreeRec = (x, y, d, a, b) => {
+  let drawTreeRec = (d, i, a, b) => {
     let c = [a[0] + b[0], a[1] + b[1]];
-
-    let edgeScale = Math.pow(2, -d) * 0.25;
-
-    let fontSize = renderer.drawNode(x, y, d, `${c[0]}/${c[1]}`);
-
-    if (fontSize > 0) {
-      drawTreeRec(x-edgeScale, y-edgeScale, d+1, a, c);
-      drawTreeRec(x+edgeScale, y-edgeScale, d+1, b, c);
+    if (renderer.drawNode(d, i, `${c[0]}/${c[1]}`)) {
+      i *= 2;
+      drawTreeRec(d+1, i,   a, c);
+      drawTreeRec(d+1, i+1, b, c);
     }
   };
-  drawTreeRec(0.5, 0.75, 0, [0,1], [1,0]);
+  drawTreeRec(0, 0, [0,1], [1,0]);
 };
 
 class Viewport {
