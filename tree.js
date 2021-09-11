@@ -1,8 +1,5 @@
 let canvas = document.getElementById('tree-vis');
 
-const DIM = 64;
-const SIZE = 400;
-
 class Renderer {
   constructor(canvas, ctx, scale, origin) {
     this._canvas = canvas;
@@ -11,8 +8,9 @@ class Renderer {
     this._origin = origin;
   }
 
-  clear() {
-  }
+  clearCanvas() {
+    this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
+  };
 
   drawNode(x, y, d, text) {
     const height = this._canvas.height;
@@ -37,6 +35,8 @@ class Renderer {
 
 const drawTree = (ctx, origin, scale) => {
   let renderer = new Renderer(canvas, ctx, scale, origin);
+  renderer.clearCanvas();
+
   let drawTreeRec = (x, y, d, a, b) => {
     let c = [a[0] + b[0], a[1] + b[1]];
 
@@ -52,10 +52,6 @@ const drawTree = (ctx, origin, scale) => {
   drawTreeRec(0.5, 0.75, 0, [0,1], [1,0]);
 };
 drawTree(canvas.getContext('2d'), {x:0, y:0}, 1);
-
-const clearCanvas = (ctx) => {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-};
 
 const deferUntilAnimationFrame = (fn) => {
   let lastArgs = null;
@@ -86,7 +82,6 @@ const deferUntilAnimationFrame = (fn) => {
 
 const redraw = deferUntilAnimationFrame((scale, origin) => {
   let ctx = canvas.getContext('2d');
-  clearCanvas(ctx);
   drawTree(ctx, scale, origin);
 });
 
@@ -96,12 +91,39 @@ class Viewport {
     this._origin = {x: 0, y: 0};
 
     this._canvas = canvas;
-    this._ctx = canvas.getContext('2d');
 
     this._setUpMouseWheel(canvas);
+    this._setUpMouseDrag(canvas);
+  }
+
+  _setUpMouseDrag(canvas) {
+    let dragPos = {x: 0, y:0};
+    let origin = this._origin;
+
+    const mouseMoveHandler = (e) => {
+      const pixelScale = this._pixelScale();
+      const dx = pixelScale * (e.clientX - dragPos.x);
+      const dy = pixelScale * (e.clientY - dragPos.y);
+      origin.x -= dx;
+      origin.y += dy;
+      dragPos.x = e.clientX;
+      dragPos.y = e.clientY;
+      this._update();
+    };
+
+    canvas.onmousedown = (e) => {
+      dragPos.x = e.clientX;
+      dragPos.y = e.clientY;
+      document.addEventListener('mousemove', mouseMoveHandler);
+    };
+    canvas.onmouseup = () => {
+      document.removeEventListener('mousemove', mouseMoveHandler);
+    };
   }
 
   _setUpMouseWheel(canvas) {
+    let origin = this._origin;
+
     canvas.onwheel = (e) => {
       e.preventDefault();
 
@@ -126,8 +148,8 @@ class Viewport {
       dy -= pixelScale * canvasY;
 
       // TODO: Figure out a simpler expression for dx and dy.
-      this._origin.x += dx;
-      this._origin.y -= dy;
+      origin.x += dx;
+      origin.y -= dy;
 
       this._update();
     };
