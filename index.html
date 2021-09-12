@@ -9,11 +9,16 @@
 </head>
 
 <body>
-  <h1>Stern-Brocot Tree</h1>
-  <div id="debug-info"></div>
   <canvas id='tree-vis' width="600" height="600">
     Your browser does not support canvas.
   </canvas>
+  <div id="control-panel">
+    <select id="tree-type">
+      <option value="drawSternBrocotTree">Stern-Brocot Tree</option>
+      <option value="drawCalkinWilfTree">Calkin–Wilf Tree</option>
+    </select>
+  </div>
+  <div id="debug-info"></div>
 </body>
 
 </html>

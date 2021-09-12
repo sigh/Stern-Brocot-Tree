@@ -63,7 +63,7 @@ class Renderer {
     ctx.stroke();
   }
 
-  drawNode(expD, i, r) {
+  _drawNode(expD, i, r) {
     const viewport = this._viewport;
     const scale = viewport.scale;
     const origin = viewport.origin;
@@ -101,23 +101,39 @@ class Renderer {
     //  - We are past the bottom of the viewport.
     return (nodeHeight > 0.5) && (yMinCoord < this._canvas.height);
   }
+
+  drawSternBrocotTree() {
+    this.clearCanvas();
+
+    let drawTreeRec = (d, expD, i, a, b) => {
+      const c = [a[0] + b[0], a[1] + b[1]];
+      if (this._drawNode(expD, i, c)) {
+        i *= 2n;
+        expD *= 2n;
+        d++;
+        drawTreeRec(d, expD, i,    a, c);
+        drawTreeRec(d, expD, i+1n, b, c);
+      }
+    };
+    drawTreeRec(0n, 1n, 0n, [0n,1n], [1n,0n]);
+  }
+
+  drawCalkinWilfTree() {
+    this.clearCanvas();
+
+    let drawTreeRec = (d, expD, i, a) => {
+      const b = a[0] + a[1];
+      if (this._drawNode(expD, i, a)) {
+        i *= 2n;
+        expD *= 2n;
+        d++;
+        drawTreeRec(d, expD, i,    [a[0], b]);
+        drawTreeRec(d, expD, i+1n, [b, a[1]]);
+      }
+    };
+    drawTreeRec(0n, 1n, 0n, [1n,1n]);
+  }
 }
-
-const drawTree = (renderer) => {
-  renderer.clearCanvas();
-
-  let drawTreeRec = (d, expD, i, a, b) => {
-    let c = [a[0] + b[0], a[1] + b[1]];
-    if (renderer.drawNode(expD, i, c)) {
-      i *= 2n;
-      expD *= 2n;
-      d++;
-      drawTreeRec(d, expD, i,    a, c);
-      drawTreeRec(d, expD, i+1n, b, c);
-    }
-  };
-  drawTreeRec(0n, 1n, 0n, [0n,1n], [1n,0n]);
-};
 
 class Viewport {
   SIZE = Math.pow(2, 16);
@@ -241,6 +257,22 @@ class Viewport {
   }
 }
 
+class ControlPanel {
+  constructor(onUpdate) {
+    this._onUpdate = onUpdate;
+    this._treeSelect = document.getElementById('tree-type');
+    this._treeSelect.onchange = () => this._update();
+  }
+
+  treeType() {
+    return this._treeSelect.value;
+  }
+
+  _update() {
+    this._onUpdate();
+  }
+}
+
 const main = () => {
   let canvas = document.getElementById('tree-vis');
   canvas.height = document.body.clientHeight;
@@ -249,12 +281,14 @@ const main = () => {
   let debugDiv = document.getElementById('debug-info');
 
   let renderer = null;
+  let controlPanel = null;
   const redraw = deferUntilAnimationFrame(() => {
-    drawTree(renderer);
+    renderer[controlPanel.treeType()]();
   });
 
   let viewport = new Viewport(canvas, redraw);
 
+  controlPanel = new ControlPanel(redraw);
   renderer = new Renderer(canvas, viewport);
   redraw();
 
