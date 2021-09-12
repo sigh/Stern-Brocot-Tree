@@ -13,7 +13,17 @@ class Renderer {
     this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
   };
 
-  drawNode(d, i, text) {
+  _drawBar(ctx, x, y, length, fontSize) {
+    ctx.lineWidth = fontSize / 20;
+    y -= ctx.lineWidth;
+
+    ctx.beginPath();
+    ctx.moveTo(x - length*0.5, y);
+    ctx.lineTo(x + length*0.5, y);
+    ctx.stroke();
+  }
+
+  drawNode(d, i, r) {
     const height = this._canvas.height;
     const width = this._canvas.width;
     const scale = this._viewport.scale;
@@ -29,17 +39,27 @@ class Renderer {
     let yMin = Math.pow(2, -d-1);
     const yMinCoord = scale*(1-yMin-origin.y);
 
-    const textScale = Math.pow(2, -d-1) * scale * 0.5;
+    const textScale = Math.pow(2, -d-1) * scale * 0.4;
     const fontSize = Math.floor(textScale * height);
 
     if (yMinCoord > 0) {
+      let ctx = this._ctx;
+      ctx.font = fontSize + 'px Serif';
+
       let x = xMin + Math.pow(2, -d-1);
       x = this._canvas.width * scale * (x - origin.x);
-      let y = yMin + Math.pow(2, -d-2);
-      y = this._canvas.height * scale * (1-y - origin.y);
 
-      this._ctx.font = `${fontSize}px Serif`;
-      this._ctx.fillText(text, x, y);
+      let dy = - this._canvas.height * scale * Math.pow(2, -d-1);
+      yMin = this._canvas.height * scale * (1-yMin - origin.y);
+
+      ctx.fillText(r[0], x, yMin + dy*0.7);
+      ctx.fillText(r[1], x, yMin + dy*0.3);
+
+      if (fontSize > 2) {
+        let width = Math.max(ctx.measureText(r[0]).width,
+                             ctx.measureText(r[1]).width);
+        this._drawBar(ctx, x, yMin + dy*0.5, width, fontSize);
+      }
     }
 
     // Don't continue further if:
@@ -54,7 +74,7 @@ const drawTree = (renderer) => {
 
   let drawTreeRec = (d, i, a, b) => {
     let c = [a[0] + b[0], a[1] + b[1]];
-    if (renderer.drawNode(d, i, `${c[0]}/${c[1]}`)) {
+    if (renderer.drawNode(d, i, c)) {
       i *= 2;
       drawTreeRec(d+1, i,   a, c);
       drawTreeRec(d+1, i+1, b, c);
