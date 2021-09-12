@@ -72,7 +72,8 @@ class Renderer {
 
     const xMin = i * scale / expD;
     const xMax = xMin + scaledD;
-    if (Number(xMin - origin.x) >= viewport.SIZE || xMax - origin.x <= 0n) {
+    if (viewport.toCanvasX(xMin - origin.x) >= this._canvas.width ||
+        xMax - origin.x <= 0n) {
       // This entire subtree is outside of the viewport, so stop.
       return false;
     }
@@ -124,13 +125,14 @@ class Viewport {
 
   constructor(canvas, onUpdate) {
     this._onUpdate = onUpdate;
+    this._canvas = canvas;
+
     this.scale = this.MIN_SCALE;
 
     // Offset origin so the tree is centered.
-    const offset = -(BigInt(this.SIZE) - this.MIN_SCALE) / 2n;
+    const offset =
+      -(BigInt(Math.floor(this._pixelScale()*canvas.width)) - this.MIN_SCALE) / 2n;
     this.origin = {x: offset, y: 0n};
-
-    this._canvas = canvas;
 
     this._setUpMouseWheel(canvas);
     this._setUpMouseDrag(canvas);
@@ -205,11 +207,11 @@ class Viewport {
   }
 
   _pixelScale() {
-    return this.SIZE / this._canvas.clientHeight;
+    return this.SIZE / this._canvas.height;
   }
 
   toCanvasX(x) {
-    return Number(x) * this._canvas.width / this.SIZE;
+    return Number(x) * this._canvas.height / this.SIZE;
   }
   toCanvasY(y) {
     return Number(y) * this._canvas.height / this.SIZE;
@@ -241,6 +243,9 @@ class Viewport {
 
 const main = () => {
   let canvas = document.getElementById('tree-vis');
+  canvas.height = document.body.clientHeight;
+  canvas.width = document.body.clientWidth;
+
   let debugDiv = document.getElementById('debug-info');
 
   let renderer = null;
