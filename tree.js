@@ -32,21 +32,35 @@ class Renderer {
     // Determine the font size so that the numbers fit within the node.
     const length = Math.max(n.length, d.length);
     const textScale = 0.4 * Math.min(6/length, 1);
-    const fontSize = Math.floor(nodeHeight * textScale);
-
-    if (fontSize < 2) return false;
+    const fontSize = nodeHeight * textScale;
 
     let ctx = this._ctx;
 
     ctx.font = fontSize + 'px Serif';
+    const width = ctx.measureText(n.length > d.length ? n : d).width;
+
+    ctx.clearRect(canvasX-width/2, canvasY-fontSize*1.1, width, fontSize*2.2);
 
     ctx.fillText(n, canvasX, canvasY - fontSize/2);
     ctx.fillText(d, canvasX, canvasY + fontSize/2);
 
-    const width = ctx.measureText(n.length > d.length ? n : d).width;
-    this._drawBar(ctx, canvasX, canvasY, width, fontSize/20);
+    // Render the bar of the fraction, but only if the font is big enough for
+    // it to be noticable.
+    if (fontSize > 2) {
+      this._drawBar(ctx, canvasX, canvasY, width, fontSize/20);
+    }
 
     return true;
+  }
+
+  _drawBranches(ctx, canvasX, canvasY, nodeHeight) {
+    if (nodeHeight < 2) return;
+    ctx.lineWidth = nodeHeight/100;
+    ctx.beginPath();
+    ctx.moveTo(canvasX - nodeHeight*0.5, canvasY + nodeHeight*0.75);
+    ctx.lineTo(canvasX, canvasY);
+    ctx.lineTo(canvasX + nodeHeight*0.5, canvasY + nodeHeight*0.75);
+    ctx.stroke();
   }
 
   drawNode(expD, i, r) {
@@ -64,28 +78,27 @@ class Renderer {
     }
 
     const yMin = scaledD/2n;
-    const yMinCoord = scale - yMin - origin.y;
+    const yMinCoord = viewport.toCanvasY(scale - yMin - origin.y);
     const nodeHeight = viewport.toCanvasY(scaledD/2n);
 
-    if (yMinCoord > 0) {
-
+    if (yMinCoord > -nodeHeight) {
       const x = xMin + scaledD/2n;
       const canvasX = viewport.toCanvasX(x - origin.x);
 
       const canvasYMin = viewport.toCanvasY(scale - yMin - origin.y);
       const canvasYMid = canvasYMin - nodeHeight*0.5;
 
-      if (!this._drawFraction(r, canvasX, canvasYMid, nodeHeight)) {
-        // If the text was too small, then just draw a bar.
-        this._drawBar(
-          this._ctx, canvasX, canvasYMid+nodeHeight/4, nodeHeight, nodeHeight/6);
+      this._drawBranches(this._ctx, canvasX, canvasYMid, nodeHeight);
+
+      if (yMinCoord > 0) {
+        this._drawFraction(r, canvasX, canvasYMid, nodeHeight);
       }
     }
 
     // Don't continue further if:
     //  - The node size is too small.
     //  - We are past the bottom of the viewport.
-    return (nodeHeight > 0.5) && (yMinCoord < viewport.SIZE);
+    return (nodeHeight > 0.5) && (yMinCoord < this._canvas.height);
   }
 }
 
@@ -158,10 +171,6 @@ class Viewport {
     canvas.onwheel = (e) => {
       e.preventDefault();
 
-      // Clamp the delta, and ensure that we don't zoom out too far.
-      let ds = clamp(e.deltaY * 0.01, -0.5, 0.5);
-      if (ds == 0 || (ds < 0 && this.scale < this.MIN_SCALE)) return;
-
       const canvasOrigin = this._canvasOrigin();
       const canvasX = e.clientX - canvasOrigin.x;
       const canvasY = e.clientY - canvasOrigin.y;
@@ -172,10 +181,17 @@ class Viewport {
       origin.x += BigInt(Math.floor(pixelScale * canvasX));
       origin.y += BigInt(Math.floor(pixelScale * canvasY));
 
+      // Clamp the delta, and ensure that we don't zoom out too far.
+      const ds = clamp(e.deltaY * 0.01, -0.5, 0.5);
+
       // Scale by 2**ds. Scale ds by 2**x so that we only deal with integers.
       const x = 5n;
-      const dsX = BigInt(Math.floor(Math.pow(2, Number(x) + ds)));
+      let dsX = BigInt(Math.floor(Math.pow(2, Number(x) + ds)));
       this.scale = this.scale * dsX >> x;
+      if (this.scale < this.MIN_SCALE) {
+        dsX = dsX * this.MIN_SCALE / this.scale;
+        this.scale = this.MIN_SCALE;
+      }
       origin.x = origin.x * dsX >> x;
       origin.y = origin.y * dsX >> x;
 
@@ -198,9 +214,6 @@ class Viewport {
   toCanvasY(y) {
     return Number(y) * this._canvas.height / this.SIZE;
   }
-  res() {
-    return this._res;
-  }
 
   _canvasOrigin() {
     const bb = this._canvas.getBoundingClientRect();
@@ -208,6 +221,10 @@ class Viewport {
   }
 
   _update() {
+    // Clamp the y direction so that we can easily zoom in without running
+    // off the bottom of the tree.
+    this.origin.y = clamp(this.origin.y, 0n, this.scale - this.MIN_SCALE);
+
     this._onUpdate();
   }
 
