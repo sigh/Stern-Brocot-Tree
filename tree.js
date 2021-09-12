@@ -150,7 +150,7 @@ class Tree {
         expD <<= 1n;
         d++;
         drawTreeRec(d, expD, i,    a, c);
-        drawTreeRec(d, expD, i+1n, b, c);
+        drawTreeRec(d, expD, i+1n, c, b);
       }
     };
     drawTreeRec(0n, 1n, 0n, [0n,1n], [1n,0n]);
