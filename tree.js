@@ -24,7 +24,7 @@ class Renderer {
   }
 
   _drawFraction(r, canvasX, canvasY, nodeHeight) {
-    if (nodeHeight < 2) return false;
+    if (nodeHeight < 2) return [0, 0, 0, 0];
 
     const n = r[0].toString();
     const d = r[1].toString();
@@ -39,7 +39,8 @@ class Renderer {
     ctx.font = fontSize + 'px Serif';
     const width = ctx.measureText(n.length > d.length ? n : d).width;
 
-    ctx.clearRect(canvasX-width/2, canvasY-fontSize*1.1, width, fontSize*2.2);
+    let rect = [canvasX-width/2, canvasY-fontSize*1.1, width, fontSize*2.2];
+    ctx.clearRect(...rect);
 
     ctx.fillText(n, canvasX, canvasY - fontSize/2);
     ctx.fillText(d, canvasX, canvasY + fontSize/2);
@@ -50,7 +51,7 @@ class Renderer {
       this._drawBar(ctx, canvasX, canvasY, width, fontSize/20);
     }
 
-    return true;
+    return rect;
   }
 
   _drawBranches(ctx, canvasX, canvasY, nodeHeight) {
@@ -63,7 +64,7 @@ class Renderer {
     ctx.stroke();
   }
 
-  _drawNode(expD, i, r) {
+  drawNode(expD, i, r, selected) {
     const viewport = this._viewport;
     const scale = viewport.scale;
     const origin = viewport.origin;
@@ -75,12 +76,14 @@ class Renderer {
     if (viewport.toCanvasX(xMin - origin.x) >= this._canvas.width ||
         xMax - origin.x <= 0n) {
       // This entire subtree is outside of the viewport, so stop.
-      return false;
+      return null;
     }
 
     const yMin = scaledD/2n;
     const yMinCoord = viewport.toCanvasY(scale - yMin - origin.y);
     const nodeHeight = viewport.toCanvasY(scaledD/2n);
+
+    let rect = [0, 0, 0, 0];
 
     if (yMinCoord > -nodeHeight) {
       const x = xMin + scaledD/2n;
@@ -89,27 +92,62 @@ class Renderer {
       const canvasYMin = viewport.toCanvasY(scale - yMin - origin.y);
       const canvasYMid = canvasYMin - nodeHeight*0.5;
 
-      this._drawBranches(this._ctx, canvasX, canvasYMid, nodeHeight);
+      let ctx = this._ctx;
+      this._drawBranches(ctx, canvasX, canvasYMid, nodeHeight);
 
       if (yMinCoord > 0) {
-        this._drawFraction(r, canvasX, canvasYMid, nodeHeight);
+        if (selected) {
+          ctx.save();
+          ctx.fillStyle = '#0066dd';
+          ctx.strokeStyle = '#0066dd';
+        }
+        rect = this._drawFraction(r, canvasX, canvasYMid, nodeHeight);
+        if (selected) ctx.restore();
       }
     }
+
+    if (rect[3] !== 0) return rect;
 
     // Don't continue further if:
     //  - The node size is too small.
     //  - We are past the bottom of the viewport.
-    return (nodeHeight > 0.5) && (yMinCoord < this._canvas.height);
+    if ((nodeHeight > 0.5) && (yMinCoord < this._canvas.height)) {
+      return rect;
+    } else {
+      return null;
+    }
+  }
+
+}
+
+class Tree {
+  constructor(renderer) {
+    this._renderer = renderer;
+    this._hitboxes = {};
+    this._selectedNode = 0;
+  }
+
+  _resetTree() {
+    this._renderer.clearCanvas();
+    this._hitboxes = {};
+  }
+
+  _addNodeHitbox(nodeId, rect) {
+    if (rect[3] === 0) return;
+    this._hitboxes[nodeId] = rect;
   }
 
   drawSternBrocotTree() {
-    this.clearCanvas();
+    this._resetTree();
 
     let drawTreeRec = (d, expD, i, a, b) => {
+      const nodeId = i+expD;
       const c = [a[0] + b[0], a[1] + b[1]];
-      if (this._drawNode(expD, i, c)) {
-        i *= 2n;
-        expD *= 2n;
+      const rect = this._renderer.drawNode(expD, i, c, nodeId === this._selectedNode);
+      if (rect !== null) {
+        this._addNodeHitbox(nodeId, rect);
+        i <<= 1n;
+        expD <<= 1n;
         d++;
         drawTreeRec(d, expD, i,    a, c);
         drawTreeRec(d, expD, i+1n, b, c);
@@ -119,13 +157,16 @@ class Renderer {
   }
 
   drawCalkinWilfTree() {
-    this.clearCanvas();
+    this._resetTree();
 
     let drawTreeRec = (d, expD, i, a) => {
+      const nodeId = i+expD;
       const b = a[0] + a[1];
-      if (this._drawNode(expD, i, a)) {
-        i *= 2n;
-        expD *= 2n;
+      const rect = this._renderer.drawNode(expD, i, a, nodeId === this._selectedNode);
+      if (rect !== null) {
+        this._addNodeHitbox(nodeId, rect);
+        i <<= 1n;
+        expD <<= 1n;
         d++;
         drawTreeRec(d, expD, i,    [a[0], b]);
         drawTreeRec(d, expD, i+1n, [b, a[1]]);
@@ -133,14 +174,59 @@ class Renderer {
     };
     drawTreeRec(0n, 1n, 0n, [1n,1n]);
   }
+
+  _isInsideNode(coord, nodeId) {
+    const rect = this._hitboxes[nodeId];
+    if (rect === undefined) return false;
+
+    return (coord.canvasX > rect[0] && coord.canvasY > rect[1]
+        && coord.canvasX < rect[0] + rect[2]
+        && coord.canvasY < rect[1] + rect[3]);
+  }
+
+  findNode(coord) {
+    const scale = coord.scale;
+
+    // Make sure we are within the tree.
+    if (coord.x <= 0n || coord.x >= scale || coord.y <= 0 || coord.y >= scale) {
+      return null;
+    }
+
+    // Check if we are within the currently selected node.
+    if (this._selectedNode) {
+      if (this._isInsideNode(coord, this._selectedNode)) {
+        return this._selectedNode;
+      }
+    }
+
+    // Find the depth.
+    const expD = scale/coord.y;
+    const d = BigInt(expD.toString(2).length - 1);
+
+    // Find the index within the layer.
+    const i = (coord.x << d) / scale;
+
+    // Find the node.
+    const nodeId = i + (1n << d);
+
+    if (this._isInsideNode(coord, nodeId)) {
+      return nodeId;
+    }
+    return null;
+  }
+
+  selectNode(nodeId) {
+    this._selectedNode = nodeId || 0n;
+  }
 }
 
 class Viewport {
   SIZE = Math.pow(2, 16);
   MIN_SCALE = BigInt(Math.floor(this.SIZE * 0.95));
 
-  constructor(canvas, onUpdate) {
+  constructor(canvas, onUpdate, onHover) {
     this._onUpdate = onUpdate;
+    this._onHover = onHover;
     this._canvas = canvas;
 
     this.scale = this.MIN_SCALE;
@@ -152,6 +238,14 @@ class Viewport {
 
     this._setUpMouseWheel(canvas);
     this._setUpMouseDrag(canvas);
+    this._setUpHover(canvas);
+  }
+
+  _setUpHover(canvas) {
+    canvas.onmousemove = (e) => {
+      const coord = this.clientXYToCoord(e.clientX, e.clientY);
+      this._onHover(coord);
+    };
   }
 
   _setUpMouseDrag(canvas) {
@@ -253,7 +347,11 @@ class Viewport {
     const pixelScale = this._pixelScale();
 
     return {x: this.origin.x + BigInt(Math.floor(pixelScale*canvasX)),
-            y: this.origin.y + BigInt(Math.floor(pixelScale*canvasY))};
+            y: this.scale - this.origin.y - BigInt(Math.floor(pixelScale*canvasY)),
+            canvasX: canvasX,
+            canvasY: canvasY,
+            scale: this.scale,
+           };
   }
 }
 
@@ -278,24 +376,33 @@ const main = () => {
   canvas.height = document.body.clientHeight;
   canvas.width = document.body.clientWidth;
 
-  let debugDiv = document.getElementById('debug-info');
-
-  let renderer = null;
+  let tree = null;
   let controlPanel = null;
   const redraw = deferUntilAnimationFrame(() => {
-    renderer[controlPanel.treeType()]();
+    tree[controlPanel.treeType()]();
   });
 
-  let viewport = new Viewport(canvas, redraw);
+  let debugDiv = document.getElementById('debug-info');
+  const hover = deferUntilAnimationFrame((coord) => {
+    debugDiv.textContent = `(${coord.x}, ${coord.y}) ${coord.scale}`;
+    const nodeId = tree.findNode(coord);
+    tree.selectNode(nodeId);
+    if (nodeId) {
+      canvas.style = 'cursor: pointer';
+    } else {
+      canvas.style = 'cursor: auto';
+    }
+    // TODO: Don't redraw if selected node is the same.
+    redraw();
+  });
+
+  let viewport = new Viewport(canvas, redraw, hover);
 
   controlPanel = new ControlPanel(redraw);
-  renderer = new Renderer(canvas, viewport);
-  redraw();
+  let renderer = new Renderer(canvas, viewport);
+  tree = new Tree(renderer);
 
-  canvas.onmousemove = (e) => {
-    let coord = viewport.clientXYToCoord(e.clientX, e.clientY);
-    debugDiv.textContent = `(${coord.x}, ${coord.y}) ${viewport.scale}`;
-  };
+  redraw();
 };
 main();
 
