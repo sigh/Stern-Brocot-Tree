@@ -24,3 +24,8 @@ const deferUntilAnimationFrame = (fn) => {
     return promise;
   });
 };
+
+// Clamp (which works with bigints).
+const clamp = (x, min, max) => {
+  return x > max ? max : x < min ? min : x;
+};

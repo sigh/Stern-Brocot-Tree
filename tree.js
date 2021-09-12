@@ -23,72 +23,76 @@ class Renderer {
     ctx.stroke();
   }
 
-  drawNode(d, i, r) {
-    const height = this._canvas.height;
-    const width = this._canvas.width;
-    const scale = this._viewport.scale;
-    const origin = this._viewport.origin;
+  drawNode(expD, i, r) {
+    const viewport = this._viewport;
+    const scale = viewport.scale;
+    const origin = viewport.origin;
 
-    let xMin = i * Math.pow(2, -d);
-    let xMax = xMin + Math.pow(2, -d);
-    if (scale * (xMin - origin.x) >= 1 || scale * (xMax - origin.x) <= 0) {
+    const scaledD = scale / expD;
+
+    const xMin = i * scale / expD;
+    const xMax = xMin + scaledD;
+    if (Number(xMin - origin.x) >= viewport.SIZE || xMax - origin.x <= 0n) {
       // This entire subtree is outside of the viewport, so stop.
       return false;
     }
 
-    let yMin = Math.pow(2, -d-1);
-    const yMinCoord = scale*(1-yMin-origin.y);
+    const yMin = scaledD/2n;
+    const yMinCoord = scale - yMin - origin.y;
 
-    const textScale = Math.pow(2, -d-1) * scale * 0.4;
-    const fontSize = Math.floor(textScale * height);
+    const textScale = Number(scaledD/2n) * 0.4;
+    const fontSize = Math.floor(viewport.toCanvasY(textScale));
 
     if (yMinCoord > 0) {
       let ctx = this._ctx;
       ctx.font = fontSize + 'px Serif';
 
-      let x = xMin + Math.pow(2, -d-1);
-      x = this._canvas.width * scale * (x - origin.x);
+      const x = xMin + scaledD/2n;
+      const canvasX = viewport.toCanvasX(x - origin.x);
 
-      let dy = - this._canvas.height * scale * Math.pow(2, -d-1);
-      yMin = this._canvas.height * scale * (1-yMin - origin.y);
+      const dy = viewport.toCanvasY(-scaledD / 2n);
+      const canvasYMin = viewport.toCanvasY(scale - yMin - origin.y);
 
-      ctx.fillText(r[0], x, yMin + dy*0.7);
-      ctx.fillText(r[1], x, yMin + dy*0.3);
+      ctx.fillText(r[0], canvasX, canvasYMin + dy*0.7);
+      ctx.fillText(r[1], canvasX, canvasYMin + dy*0.3);
 
       if (fontSize > 2) {
-        let width = Math.max(ctx.measureText(r[0]).width,
-                             ctx.measureText(r[1]).width);
-        this._drawBar(ctx, x, yMin + dy*0.5, width, fontSize);
+        const width = Math.max(ctx.measureText(r[0]).width,
+                               ctx.measureText(r[1]).width);
+        this._drawBar(ctx, canvasX, canvasYMin + dy*0.5, width, fontSize);
       }
     }
 
     // Don't continue further if:
     //  - The text will become too small to show.
     //  - We are past the bottom of the viewport.
-    return (fontSize >= 2) && (yMinCoord < 1);
+    return (fontSize >= 2) && (yMinCoord < viewport.SIZE);
   }
 }
 
 const drawTree = (renderer) => {
   renderer.clearCanvas();
 
-  let drawTreeRec = (d, i, a, b) => {
+  let drawTreeRec = (d, expD, i, a, b) => {
     let c = [a[0] + b[0], a[1] + b[1]];
-    if (renderer.drawNode(d, i, c)) {
-      i *= 2;
-      drawTreeRec(d+1, i,   a, c);
-      drawTreeRec(d+1, i+1, b, c);
+    if (renderer.drawNode(expD, i, c)) {
+      i *= 2n;
+      expD *= 2n;
+      d++;
+      drawTreeRec(d, expD, i,    a, c);
+      drawTreeRec(d, expD, i+1n, b, c);
     }
   };
-  drawTreeRec(0, 0, [0,1], [1,0]);
+  drawTreeRec(0n, 1n, 0n, [0n,1n], [1n,0n]);
 };
 
 class Viewport {
+  SIZE = Math.pow(2, 16);
+
   constructor(canvas, onUpdate) {
     this._onUpdate = onUpdate;
-    this._logScale = 0;
-    this.scale = 1;
-    this.origin = {x: 0, y: 0};
+    this.scale = BigInt(this.SIZE);
+    this.origin = {x: 0n, y: 0n};
 
     this._canvas = canvas;
 
@@ -105,8 +109,8 @@ class Viewport {
       const pixelScale = this._pixelScale();
       const dx = pixelScale * (e.clientX - dragPos.x);
       const dy = pixelScale * (e.clientY - dragPos.y);
-      origin.x -= dx;
-      origin.y -= dy;
+      origin.x -= BigInt(Math.floor(dx));
+      origin.y -= BigInt(Math.floor(dy));
       dragPos.x = e.clientX;
       dragPos.y = e.clientY;
       this._update();
@@ -131,37 +135,48 @@ class Viewport {
     canvas.onwheel = (e) => {
       e.preventDefault();
 
+      // Clamp the delta, and ensure that we don't zoom out too far.
+      let ds = clamp(e.deltaY * 0.01, -0.5, 0.5);
+      if (ds == 0 || (ds < 0 && this.scale < this.SIZE)) return;
+
       const canvasOrigin = this._canvasOrigin();
       const canvasX = e.clientX - canvasOrigin.x;
       const canvasY = e.clientY - canvasOrigin.y;
 
+      // Remove offset from origin, so that it will be corretly handled when
+      // scaling.
       let pixelScale = this._pixelScale();
-      let dx = pixelScale * canvasX;
-      let dy = pixelScale * canvasY;
+      origin.x += BigInt(Math.floor(pixelScale * canvasX));
+      origin.y += BigInt(Math.floor(pixelScale * canvasY));
 
-      let ds = e.deltaY * 0.01;
-      ds = ds > 0.5 ? 0.5 :
-           ds < -0.5 ? -0.5 :
-           ds;
-      ds = Math.max(ds, -this._logScale);
+      // Scale by 2**ds. Scale ds by 2**x so that we only deal with integers.
+      const x = 5n;
+      const dsX = BigInt(Math.floor(Math.pow(2, Number(x) + ds)));
+      this.scale = this.scale * dsX >> x;
+      origin.x = origin.x * dsX >> x;
+      origin.y = origin.y * dsX >> x;
 
-      this._logScale += ds;
-      this.scale = Math.pow(2, this._logScale);
-
+      // Reoffset origin after scaling.
       pixelScale = this._pixelScale();
-      dx -= pixelScale * canvasX;
-      dy -= pixelScale * canvasY;
-
-      // TODO: Figure out a simpler expression for dx and dy.
-      origin.x += dx;
-      origin.y += dy;
+      origin.x -= BigInt(Math.floor(pixelScale * canvasX));
+      origin.y -= BigInt(Math.floor(pixelScale * canvasY));
 
       this._update();
     };
   }
 
   _pixelScale() {
-    return 1 / this.scale / this._canvas.clientHeight;
+    return this.SIZE / this._canvas.clientHeight;
+  }
+
+  toCanvasX(x) {
+    return Number(x) * this._canvas.width / this.SIZE;
+  }
+  toCanvasY(y) {
+    return Number(y) * this._canvas.height / this.SIZE;
+  }
+  res() {
+    return this._res;
   }
 
   _canvasOrigin() {
@@ -179,8 +194,8 @@ class Viewport {
     const canvasY = clientY - canvasOrigin.y;
     const pixelScale = this._pixelScale();
 
-    return {x: this.origin.x + pixelScale*canvasX,
-            y: this.origin.y + pixelScale*canvasY};
+    return {x: this.origin.x + BigInt(Math.floor(pixelScale*canvasX)),
+            y: this.origin.y + BigInt(Math.floor(pixelScale*canvasY))};
   }
 }
 
@@ -200,7 +215,7 @@ const main = () => {
 
   canvas.onmousemove = (e) => {
     let coord = viewport.clientXYToCoord(e.clientX, e.clientY);
-    debugDiv.textContent = `(${coord.x.toFixed(16)}, ${coord.y.toFixed(16)}) ${viewport._logScale}`;
+    debugDiv.textContent = `(${coord.x}, ${coord.y}) ${viewport.scale}`;
   };
 };
 main();
