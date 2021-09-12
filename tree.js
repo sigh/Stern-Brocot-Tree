@@ -13,14 +13,40 @@ class Renderer {
     this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
   };
 
-  _drawBar(ctx, x, y, length, fontSize) {
-    ctx.lineWidth = fontSize / 20;
+  _drawBar(ctx, x, y, length, width) {
+    ctx.lineWidth = width;
     y -= ctx.lineWidth;
 
     ctx.beginPath();
     ctx.moveTo(x - length*0.5, y);
     ctx.lineTo(x + length*0.5, y);
     ctx.stroke();
+  }
+
+  _drawFraction(r, canvasX, canvasY, nodeHeight) {
+    if (nodeHeight < 2) return false;
+
+    const n = r[0].toString();
+    const d = r[1].toString();
+
+    // Determine the font size so that the numbers fit within the node.
+    const length = Math.max(n.length, d.length);
+    const textScale = 0.4 * Math.min(6/length, 1);
+    const fontSize = Math.floor(nodeHeight * textScale);
+
+    if (fontSize < 2) return false;
+
+    let ctx = this._ctx;
+
+    ctx.font = fontSize + 'px Serif';
+
+    ctx.fillText(n, canvasX, canvasY - fontSize/2);
+    ctx.fillText(d, canvasX, canvasY + fontSize/2);
+
+    const width = ctx.measureText(n.length > d.length ? n : d).width;
+    this._drawBar(ctx, canvasX, canvasY, width, fontSize/20);
+
+    return true;
   }
 
   drawNode(expD, i, r) {
@@ -39,34 +65,27 @@ class Renderer {
 
     const yMin = scaledD/2n;
     const yMinCoord = scale - yMin - origin.y;
-
-    const textScale = Number(scaledD/2n) * 0.4;
-    const fontSize = Math.floor(viewport.toCanvasY(textScale));
+    const nodeHeight = viewport.toCanvasY(scaledD/2n);
 
     if (yMinCoord > 0) {
-      let ctx = this._ctx;
-      ctx.font = fontSize + 'px Serif';
 
       const x = xMin + scaledD/2n;
       const canvasX = viewport.toCanvasX(x - origin.x);
 
-      const dy = viewport.toCanvasY(-scaledD / 2n);
       const canvasYMin = viewport.toCanvasY(scale - yMin - origin.y);
+      const canvasYMid = canvasYMin - nodeHeight*0.5;
 
-      ctx.fillText(r[0], canvasX, canvasYMin + dy*0.7);
-      ctx.fillText(r[1], canvasX, canvasYMin + dy*0.3);
-
-      if (fontSize > 2) {
-        const width = Math.max(ctx.measureText(r[0]).width,
-                               ctx.measureText(r[1]).width);
-        this._drawBar(ctx, canvasX, canvasYMin + dy*0.5, width, fontSize);
+      if (!this._drawFraction(r, canvasX, canvasYMid, nodeHeight)) {
+        // If the text was too small, then just draw a bar.
+        this._drawBar(
+          this._ctx, canvasX, canvasYMid+nodeHeight/4, nodeHeight, nodeHeight/6);
       }
     }
 
     // Don't continue further if:
-    //  - The text will become too small to show.
+    //  - The node size is too small.
     //  - We are past the bottom of the viewport.
-    return (fontSize >= 2) && (yMinCoord < viewport.SIZE);
+    return (nodeHeight > 0.5) && (yMinCoord < viewport.SIZE);
   }
 }
 
