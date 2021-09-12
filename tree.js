@@ -101,6 +101,7 @@ class Viewport {
     let origin = this.origin;
 
     const mouseMoveHandler = (e) => {
+      e.preventDefault();
       const pixelScale = this._pixelScale();
       const dx = pixelScale * (e.clientX - dragPos.x);
       const dy = pixelScale * (e.clientY - dragPos.y);
@@ -112,12 +113,15 @@ class Viewport {
     };
 
     canvas.onmousedown = (e) => {
+      e.preventDefault();
       dragPos.x = e.clientX;
       dragPos.y = e.clientY;
       document.addEventListener('mousemove', mouseMoveHandler);
-    };
-    canvas.onmouseup = () => {
-      document.removeEventListener('mousemove', mouseMoveHandler);
+      let mouseUpHandler = () => {
+        document.removeEventListener('mousemove', mouseMoveHandler);
+        document.removeEventListener('mouseup', mouseUpHandler);
+      };
+      document.addEventListener('mouseup', mouseUpHandler);
     };
   }
 
@@ -196,7 +200,7 @@ const main = () => {
 
   canvas.onmousemove = (e) => {
     let coord = viewport.clientXYToCoord(e.clientX, e.clientY);
-    debugDiv.textContent = `(${coord.x.toFixed(5)}, ${coord.y.toFixed(5)})`;
+    debugDiv.textContent = `(${coord.x.toFixed(16)}, ${coord.y.toFixed(16)}) ${viewport._logScale}`;
   };
 };
 main();
