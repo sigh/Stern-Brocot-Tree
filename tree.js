@@ -88,11 +88,15 @@ const drawTree = (renderer) => {
 
 class Viewport {
   SIZE = Math.pow(2, 16);
+  MIN_SCALE = BigInt(Math.floor(this.SIZE * 0.95));
 
   constructor(canvas, onUpdate) {
     this._onUpdate = onUpdate;
-    this.scale = BigInt(this.SIZE);
-    this.origin = {x: 0n, y: 0n};
+    this.scale = this.MIN_SCALE;
+
+    // Offset origin so the tree is centered.
+    const offset = -(BigInt(this.SIZE) - this.MIN_SCALE) / 2n;
+    this.origin = {x: offset, y: 0n};
 
     this._canvas = canvas;
 
@@ -137,7 +141,7 @@ class Viewport {
 
       // Clamp the delta, and ensure that we don't zoom out too far.
       let ds = clamp(e.deltaY * 0.01, -0.5, 0.5);
-      if (ds == 0 || (ds < 0 && this.scale < this.SIZE)) return;
+      if (ds == 0 || (ds < 0 && this.scale < this.MIN_SCALE)) return;
 
       const canvasOrigin = this._canvasOrigin();
       const canvasX = e.clientX - canvasOrigin.x;
