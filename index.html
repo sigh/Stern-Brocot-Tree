@@ -4,6 +4,19 @@
   <meta charset="utf-8">
   <title>Stern-Brocot Tree</title>
   <link rel="stylesheet" href="./style.css" type="text/css">
+
+  <script>
+    MathJax = {
+      chtml: {
+        displayAlign: 'left',
+        scale: 0.8,
+      },
+    };
+  </script>
+
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3.0.1/es5/tex-mml-chtml.js"></script>
+
   <script defer src="util.js"></script>
   <script defer src="tree.js"></script>
 </head>
@@ -12,11 +25,13 @@
   <canvas id='tree-vis' width="600" height="600">
     Your browser does not support canvas.
   </canvas>
-  <div id="control-panel">
+  <div id="side-panel">
     <select id="tree-type">
-      <option value="drawSternBrocotTree">Stern-Brocot Tree</option>
-      <option value="drawCalkinWilfTree">Calkin–Wilf Tree</option>
+      <option value="stern-brocot">Stern-Brocot Tree</option>
+      <option value="calkin-wilf">Calkin–Wilf Tree</option>
     </select>
+    <div id="node-info">
+    </div>
   </div>
   <div id="debug-info"></div>
 </body>

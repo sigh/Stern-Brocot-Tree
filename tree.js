@@ -137,9 +137,7 @@ class Tree {
     this._hitboxes[nodeId] = rect;
   }
 
-  drawSternBrocotTree() {
-    this._resetTree();
-
+  _drawSternBrocotTree() {
     let drawTreeRec = (d, expD, i, a, b) => {
       const nodeId = i+expD;
       const c = [a[0] + b[0], a[1] + b[1]];
@@ -156,9 +154,7 @@ class Tree {
     drawTreeRec(0n, 1n, 0n, [0n,1n], [1n,0n]);
   }
 
-  drawCalkinWilfTree() {
-    this._resetTree();
-
+  _drawCalkinWilfTree() {
     let drawTreeRec = (d, expD, i, a) => {
       const nodeId = i+expD;
       const b = a[0] + a[1];
@@ -173,6 +169,21 @@ class Tree {
       }
     };
     drawTreeRec(0n, 1n, 0n, [1n,1n]);
+  }
+
+  draw(type) {
+    this._resetTree();
+
+    switch (type) {
+      case 'stern-brocot':
+        this._drawSternBrocotTree();
+        break;
+      case 'calkin-wilf':
+        this._drawCalkinWilfTree();
+        break;
+      default:
+        throw('Unknown tree type: ' + type);
+    };
   }
 
   _isInsideNode(coord, nodeId) {
@@ -371,6 +382,167 @@ class ControlPanel {
   }
 }
 
+class NodeInfoView {
+  constructor() {
+    this._container = document.getElementById('node-info');
+  }
+
+  _runLengthEncode(nodeIdStr) {
+    let currVal = 1;
+    let encoded = [0];
+    let encodedPos = 0;
+    for (let i = 1; i < nodeIdStr.length; i++) {
+      if (nodeIdStr[i] != currVal) {
+        currVal = 1 - currVal;
+        encoded.push(0);
+        encodedPos++;
+      }
+      encoded[encodedPos]++;
+    }
+    return encoded;
+  }
+
+  _toContinuedFraction(rle,treeType) {
+    let cf = Array.from(rle);
+
+    if (treeType == 'calkin-wilf') {
+      if (cf.length%2 == 0) cf.push(0);
+      cf.reverse();
+      if (cf[cf.length-1] == 0) cf.pop();
+    }
+
+    cf[cf.length-1]++;
+    return cf;
+  }
+
+  _evalContinuedFrac(cf) {
+    let [a, b] = [1n, 0n];
+    for (let i = cf.length-1; i>=0 ; i--) {
+      [a, b] = [a*BigInt(cf[i]) + b, a];
+    }
+    return [a,b];
+  }
+
+  _makeTextElem(type, text) {
+    let elem = document.createElement(type);
+    elem.textContent = text;
+    return elem;
+  }
+
+  _makeMathElem() {
+    let math = document.createElement('math');
+    math.setAttribute('xmlns', 'http://www.w3.org/1998/Math/MathML');
+    return math;
+  }
+
+  _renderContinuedFraction(cf) {
+    let container = document.createElement('div');
+
+    let math = this._makeMathElem();
+    container.appendChild(math);
+
+    if (cf[0] > 0) {
+      math.appendChild(this._makeTextElem('mn', cf[0]));
+    }
+
+    for (let i = 1; i < cf.length; i++) {
+      if (cf[i-1] > 0) {
+        math.appendChild(this._makeTextElem('mo', '+'));
+      }
+      if (i > 10) {
+        math.appendChild(this._makeTextElem('mo', '...'));
+        break;
+      }
+
+      let frac = document.createElement('mfrac');
+
+      frac.appendChild(this._makeTextElem('mn', 1));
+      let den = document.createElement('mrow');
+      den.appendChild(this._makeTextElem('mn', cf[i]));
+      frac.appendChild(den);
+
+      math.appendChild(frac);
+      math = den;
+    }
+
+    return container;
+  }
+
+  _renderFrac(a, b) {
+    let container = document.createElement('div');
+
+    let math = this._makeMathElem();
+    container.appendChild(math);
+
+    let frac = document.createElement('mfrac');
+    frac.appendChild(this._makeTextElem('mn', a));
+    frac.appendChild(this._makeTextElem('mn', b));
+
+    math.appendChild(frac);
+
+    return container;
+  }
+
+  _renderRLE(rle) {
+    let div = document.createElement('div');
+
+    for (let i = 0; i < rle.length; i++) {
+      if (!rle[i]) continue;
+      const letter = 'RL'[i&1];
+      div.appendChild(this._makeTextElem('span', letter));
+      if (rle[i] > 1) div.appendChild(this._makeTextElem('sup', rle[i]));
+    }
+
+    // If there are no elements, then output 'I' for the identity.
+    if (rle.length == 1 && rle[0] == 0) {
+      div.appendChild(this._makeTextElem('span', 'I'));
+    }
+
+    return div;
+  }
+
+  _addItem(container, title, item) {
+    let div = document.createElement('div');
+    let titleSpan = this._makeTextElem('span', title);
+    titleSpan.className = 'info-title';
+    item.classList.add('info-item');
+    div.appendChild(titleSpan);
+    div.appendChild(item);
+    container.appendChild(div);
+  }
+
+  _showNode(nodeId, treeType) {
+    const nodeIdStr = nodeId.toString(2);
+    const rle = this._runLengthEncode(nodeIdStr);
+    const cf = this._toContinuedFraction(rle, treeType);
+
+    let container = this._container;
+    this._addItem(container, '',
+                  this._renderFrac(...this._evalContinuedFrac(cf)));
+    this._addItem(container, 'Depth',
+                  this._makeTextElem('div', nodeIdStr.length-1));
+    this._addItem(container, 'Index',
+                  this._makeTextElem('div', nodeId));
+    this._addItem(container, 'Path',
+                  this._renderRLE(rle));
+    this._addItem(container, 'Continued Fraction',
+                  this._renderContinuedFraction(cf));
+
+    MathJax.typeset([container]);
+  }
+
+  showNode(nodeId, treeType) {
+    // Clear the container.
+    while (this._container.firstChild) {
+      this._container.removeChild(this._container.firstChild);
+    }
+
+    if (!nodeId) return;
+
+    this._showNode(nodeId, treeType);
+  }
+}
+
 const main = () => {
   let canvas = document.getElementById('tree-vis');
   canvas.height = document.body.clientHeight;
@@ -379,20 +551,29 @@ const main = () => {
   let tree = null;
   let controlPanel = null;
   const redraw = deferUntilAnimationFrame(() => {
-    tree[controlPanel.treeType()]();
+    tree.draw(controlPanel.treeType());
   });
+  let nodeInfoView = new NodeInfoView();
 
   let debugDiv = document.getElementById('debug-info');
+
+  let selectedNode = 0n;
+  let treeType = '';
   const hover = deferUntilAnimationFrame((coord) => {
     debugDiv.textContent = `(${coord.x}, ${coord.y}) ${coord.scale}`;
     const nodeId = tree.findNode(coord);
+    const type = controlPanel.treeType();
+    if (selectedNode == nodeId && treeType == type) return;
+    selectedNode = nodeId;
+    treeType = type;
+
     tree.selectNode(nodeId);
     if (nodeId) {
       canvas.style = 'cursor: pointer';
     } else {
       canvas.style = 'cursor: auto';
     }
-    // TODO: Don't redraw if selected node is the same.
+    nodeInfoView.showNode(nodeId, treeType);
     redraw();
   });
 

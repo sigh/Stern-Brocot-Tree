@@ -5,12 +5,33 @@
   margin: 0;
 }
 
-#control-panel {
+#side-panel {
   background: white;
   position: absolute;
   margin: 10px;
+  padding: 5px;
   top: 0;
   left: 0;
+
+  width: 200px;
+  box-shadow: 1px 1px 3px;
+}
+
+#node-info {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.info-title {
+  line-height: 1;
+  font-size: 12;
+  color: grey;
+  max-width: 450px;
+}
+
+.info-item {
+  overflow: scroll;
 }
 
 select {
