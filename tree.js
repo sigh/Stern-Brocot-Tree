@@ -171,17 +171,21 @@ class Renderer {
 class Tree {
   constructor(renderer) {
     this._renderer = renderer;
-    this._hitboxes = {};
+    this._hitboxes = new Map();
+    this._nodesProcessed = 0;
   }
 
   _resetTree() {
     this._renderer.clearCanvas();
-    this._hitboxes = {};
+    this._hitboxes.clear();
+    this._nodesProcessed = 0;
   }
 
-  _addNodeHitbox(nodeId, rect) {
-    if (rect[3] === 0) return;
-    this._hitboxes[nodeId] = rect;
+  _addNodeHitbox(d, i, rect) {
+    if (rect[3] !== 0) {
+      const nodeId = i | (1n << d);
+      this._hitboxes.set(nodeId, rect);
+    }
   }
 
   draw(type, selectedNodeId) {
@@ -208,9 +212,11 @@ class Tree {
     };
 
     let selectedBranches = selectedNodeId.toString(2);
+    let stack = [[0n, 0n, ...initState, selectedNodeId > 0]];
 
-    const drawTreeRec = (d, expD, i, s0, s1, onSelectedBranch) => {
-      const nodeId = i+expD;
+    while (stack.length) {
+      let [d, i, s0, s1, onSelectedBranch] = stack.pop();
+      this._nodesProcessed++;
       const s2 = nextStateFn(s0, s1);
       const v = valueFn(s0, s1, s2);
 
@@ -226,19 +232,17 @@ class Tree {
 
       const rect = this._renderer.drawNode(d, i, v, selectionType);
       if (rect !== null) {
-        this._addNodeHitbox(nodeId, rect);
+        this._addNodeHitbox(d, i, rect);
         i <<= 1n;
-        expD <<= 1n;
         d++;
-        drawTreeRec(d, expD, i,    s0, s2, selectionType === Renderer.SELECT_LEFT);
-        drawTreeRec(d, expD, i+1n, s2, s1, selectionType === Renderer.SELECT_RIGHT);
+        stack.push([d, i,    s0, s2, selectionType === Renderer.SELECT_LEFT]);
+        stack.push([d, i+1n, s2, s1, selectionType === Renderer.SELECT_RIGHT]);
       }
-    };
-    drawTreeRec(0n, 1n, 0n, ...initState, selectedNodeId > 0);
+    }
   }
 
   isInsideNodeId(coord, nodeId) {
-    const rect = this._hitboxes[nodeId];
+    const rect = this._hitboxes.get(nodeId);
     if (rect === undefined) return false;
 
     return (coord.canvasX > rect[0] && coord.canvasY > rect[1]
@@ -286,7 +290,7 @@ class Tree {
 
     let isRight = true;
     let d = 0n;
-    const maxD = 500n;
+    const maxD = 1n << 13;
     for (let i = 0; i < cf.length; i++) {
       if (maxD - d < cf[i]) {
         break;
@@ -807,6 +811,7 @@ class Controller {
     this._treeType = this._controlPanel.treeType();
     this._hoverNodeId = null;
     this._selectedNodeId = null;
+    this._currentCoord = null;
 
     this._setUpSelection();
   }
@@ -830,11 +835,18 @@ class Controller {
     const highlighedNodeId = this._selectedNodeId || this._hoverNodeId;
     this._tree.draw(this._treeType, highlighedNodeId);
     this._nodeInfoView.showNode(this._treeType, highlighedNodeId);
+    this._updateDebug();
+  }
+
+  _updateDebug() {
+    // let coord = this._currentCoord;
+    // if (coord) this._debugDiv.textContent = `(${coord.x}, ${coord.y}) ${coord.scale}`;
+    this._debugDiv.textContent = `${this._tree._hitboxes.size}/${this._tree._nodesProcessed}`;
   }
 
   _setUpSelection() {
-    const updateDebug = deferUntilAnimationFrame((coord) => {
-      // this._debugDiv.textContent = `(${coord.x}, ${coord.y}) ${coord.scale}`;
+    const updateDebug = deferUntilAnimationFrame(() => {
+      this._updateDebug();
     });
 
     const updateSelection = deferUntilAnimationFrame((coord) => {
@@ -858,9 +870,10 @@ class Controller {
 
     this._canvas.onmousemove = (e) => {
       const coord = this._viewport.clientXYToCoord(e.clientX, e.clientY);
+      this._currentCoord = coord;
 
       updateSelection(coord);
-      updateDebug(coord);
+      updateDebug();
     };
 
     this._canvas.onclick = (e) => {
