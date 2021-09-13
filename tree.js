@@ -54,7 +54,7 @@ class Renderer {
     return rect;
   }
 
-  _drawBranches(ctx, canvasX, canvasY, nodeHeight) {
+  _drawBranches(ctx, canvasX, canvasY, nodeHeight, selectionType) {
     if (nodeHeight < 2) return;
     ctx.lineWidth = nodeHeight/100;
     ctx.beginPath();
@@ -62,6 +62,17 @@ class Renderer {
     ctx.lineTo(canvasX, canvasY);
     ctx.lineTo(canvasX + nodeHeight*0.5, canvasY + nodeHeight*0.75);
     ctx.stroke();
+
+    if (selectionType > Renderer.SELECT_FINAL) {
+      const sign = selectionType == Renderer.SELECT_LEFT ? -1 : 1;
+      ctx.save();
+      ctx.strokeStyle = Renderer._PATH_COLOR;
+      ctx.beginPath();
+      ctx.lineTo(canvasX, canvasY);
+      ctx.lineTo(canvasX + sign*nodeHeight*0.5, canvasY + nodeHeight*0.75);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   centeredNodePosition(d, i) {
@@ -91,7 +102,15 @@ class Renderer {
     }
   }
 
-  drawNode(d, i, r, selected) {
+  static SELECT_NONE = 0;
+  static SELECT_FINAL = 1;
+  static SELECT_LEFT = 2;
+  static SELECT_RIGHT = 3;
+
+  static _PATH_COLOR = '#0000aa';
+  static _SELECTED_COLOR = '#0099ff';
+
+  drawNode(d, i, r, selectionType) {
     const viewport = this._viewport;
     const scale = viewport.scale;
     const origin = viewport.origin;
@@ -120,16 +139,18 @@ class Renderer {
       const canvasYMid = canvasYMin - nodeHeight*0.5;
 
       let ctx = this._ctx;
-      this._drawBranches(ctx, canvasX, canvasYMid, nodeHeight);
+      this._drawBranches(ctx, canvasX, canvasYMid, nodeHeight, selectionType);
 
       if (yMinCoord > 0) {
-        if (selected) {
+        if (selectionType) {
           ctx.save();
-          ctx.fillStyle = '#0066dd';
-          ctx.strokeStyle = '#0066dd';
+          const color = selectionType === Renderer.SELECT_FINAL
+            ? Renderer._SELECTED_COLOR : Renderer._PATH_COLOR;
+          ctx.fillStyle = color;
+          ctx.strokeStyle = color;
         }
         rect = this._drawFraction(r, canvasX, canvasYMid, nodeHeight);
-        if (selected) ctx.restore();
+        if (selectionType) ctx.restore();
       }
     }
 
@@ -169,6 +190,7 @@ class Tree {
     let nextStateFn = null;
     let valueFn = null;
     let initState = null;
+    selectedNodeId = selectedNodeId || 0n;
 
     switch (type) {
       case 'stern-brocot':
@@ -185,21 +207,34 @@ class Tree {
         throw('Unknown tree type: ' + type);
     };
 
-    const drawTreeRec = (d, expD, i, s0, s1) => {
+    let selectedBranches = selectedNodeId.toString(2);
+
+    const drawTreeRec = (d, expD, i, s0, s1, onSelectedBranch) => {
       const nodeId = i+expD;
       const s2 = nextStateFn(s0, s1);
       const v = valueFn(s0, s1, s2);
-      const rect = this._renderer.drawNode(d, i, v, nodeId === selectedNodeId);
+
+      let selectionType = Renderer.SELECT_NONE;
+      if (onSelectedBranch) {
+        if (d == selectedBranches.length-1) {
+          selectionType = Renderer.SELECT_FINAL;
+          onSelectedBranch = false;
+        } else {
+          selectionType = selectedBranches[d+1n] === '0' ? Renderer.SELECT_LEFT : Renderer.SELECT_RIGHT;
+        }
+      }
+
+      const rect = this._renderer.drawNode(d, i, v, selectionType);
       if (rect !== null) {
         this._addNodeHitbox(nodeId, rect);
         i <<= 1n;
         expD <<= 1n;
         d++;
-        drawTreeRec(d, expD, i,    s0, s2);
-        drawTreeRec(d, expD, i+1n, s2, s1);
+        drawTreeRec(d, expD, i,    s0, s2, selectionType === Renderer.SELECT_LEFT);
+        drawTreeRec(d, expD, i+1n, s2, s1, selectionType === Renderer.SELECT_RIGHT);
       }
     };
-    drawTreeRec(0n, 1n, 0n, ...initState);
+    drawTreeRec(0n, 1n, 0n, ...initState, selectedNodeId > 0);
   }
 
   isInsideNodeId(coord, nodeId) {
@@ -299,6 +334,8 @@ class Viewport {
 
     this._setUpMouseWheel(canvas);
     this._setUpMouseDrag(canvas);
+
+    this._dragDistance = 0;
   }
 
   setUpdateCallback(onUpdate) {
@@ -312,8 +349,11 @@ class Viewport {
     const mouseMoveHandler = (e) => {
       e.preventDefault();
       const pixelScale = this._pixelScale();
-      const dx = pixelScale * (e.clientX - dragPos.x);
-      const dy = pixelScale * (e.clientY - dragPos.y);
+      const dcx = e.clientX - dragPos.x;
+      const dcy = e.clientY - dragPos.y;
+      this._dragDistance += Math.abs(dcx) + Math.abs(dcy);  // Manhatten distance.
+      const dx = pixelScale * dcx;
+      const dy = pixelScale * dcy;
       origin.x -= BigInt(Math.floor(dx));
       origin.y -= BigInt(Math.floor(dy));
       dragPos.x = e.clientX;
@@ -325,6 +365,7 @@ class Viewport {
       e.preventDefault();
       dragPos.x = e.clientX;
       dragPos.y = e.clientY;
+      this._dragDistance = 0;
       document.addEventListener('mousemove', mouseMoveHandler);
       let mouseUpHandler = () => {
         document.removeEventListener('mousemove', mouseMoveHandler);
@@ -332,6 +373,10 @@ class Viewport {
       };
       document.addEventListener('mouseup', mouseUpHandler);
     };
+  }
+
+  wasDragged() {
+    return this._dragDistance > 1;
   }
 
   _setUpMouseWheel(canvas) {
@@ -770,7 +815,6 @@ class Controller {
     const targetContinuedFraction = this._controlPanel.popTargetContinuedFraction();
     if (targetContinuedFraction !== null) {
       if (targetContinuedFraction.length > 0) {
-        console.log(targetContinuedFraction);
         const node = this._tree.nodeForContinuousFraction(
           this._treeType, targetContinuedFraction);
         this._selectedNodeId = node.nodeId;
@@ -820,8 +864,10 @@ class Controller {
     };
 
     this._canvas.onclick = (e) => {
-      this._selectedNodeId = this._hoverNodeId;
-      this.update();
+      if (!this._viewport.wasDragged()) {
+        this._selectedNodeId = this._hoverNodeId;
+        this.update();
+      }
     };
   }
 }
