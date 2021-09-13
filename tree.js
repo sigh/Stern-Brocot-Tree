@@ -64,29 +64,29 @@ class Renderer {
     ctx.stroke();
   }
 
-  drawNode(expD, i, r, selected) {
+  drawNode(d, i, r, selected) {
     const viewport = this._viewport;
     const scale = viewport.scale;
     const origin = viewport.origin;
 
-    const scaledD = scale / expD;
+    const layerHeight = scale >> (d+1n);
 
-    const xMin = i * scale / expD;
-    const xMax = xMin + scaledD;
+    const xMin = (i * scale) >> d;
+    const xMax = xMin + layerHeight*2n;
     if (viewport.toCanvasX(xMin - origin.x) >= this._canvas.width ||
         xMax - origin.x <= 0n) {
       // This entire subtree is outside of the viewport, so stop.
       return null;
     }
 
-    const yMin = scaledD/2n;
+    const yMin = layerHeight;
     const yMinCoord = viewport.toCanvasY(scale - yMin - origin.y);
-    const nodeHeight = viewport.toCanvasY(scaledD/2n);
+    const nodeHeight = viewport.toCanvasY(layerHeight);
 
     let rect = [0, 0, 0, 0];
 
     if (yMinCoord > -nodeHeight) {
-      const x = xMin + scaledD/2n;
+      const x = xMin + layerHeight;
       const canvasX = viewport.toCanvasX(x - origin.x);
 
       const canvasYMin = viewport.toCanvasY(scale - yMin - origin.y);
@@ -124,7 +124,6 @@ class Tree {
   constructor(renderer) {
     this._renderer = renderer;
     this._hitboxes = {};
-    this._selectedNode = 0;
   }
 
   _resetTree() {
@@ -137,53 +136,43 @@ class Tree {
     this._hitboxes[nodeId] = rect;
   }
 
-  _drawSternBrocotTree() {
-    let drawTreeRec = (d, expD, i, a, b) => {
-      const nodeId = i+expD;
-      const c = [a[0] + b[0], a[1] + b[1]];
-      const rect = this._renderer.drawNode(expD, i, c, nodeId === this._selectedNode);
-      if (rect !== null) {
-        this._addNodeHitbox(nodeId, rect);
-        i <<= 1n;
-        expD <<= 1n;
-        d++;
-        drawTreeRec(d, expD, i,    a, c);
-        drawTreeRec(d, expD, i+1n, c, b);
-      }
-    };
-    drawTreeRec(0n, 1n, 0n, [0n,1n], [1n,0n]);
-  }
-
-  _drawCalkinWilfTree() {
-    let drawTreeRec = (d, expD, i, a) => {
-      const nodeId = i+expD;
-      const b = a[0] + a[1];
-      const rect = this._renderer.drawNode(expD, i, a, nodeId === this._selectedNode);
-      if (rect !== null) {
-        this._addNodeHitbox(nodeId, rect);
-        i <<= 1n;
-        expD <<= 1n;
-        d++;
-        drawTreeRec(d, expD, i,    [a[0], b]);
-        drawTreeRec(d, expD, i+1n, [b, a[1]]);
-      }
-    };
-    drawTreeRec(0n, 1n, 0n, [1n,1n]);
-  }
-
-  draw(type) {
+  draw(type, selectedNodeId) {
     this._resetTree();
+
+    let nextStateFn = null;
+    let valueFn = null;
+    let initState = null;
 
     switch (type) {
       case 'stern-brocot':
-        this._drawSternBrocotTree();
+        initState = [[0n,1n], [1n,0n]]
+        nextStateFn = (s0, s1) => [s0[0] + s1[0], s0[1] + s1[1]];
+        valueFn = (s0, s1, s2) => s2;
         break;
       case 'calkin-wilf':
-        this._drawCalkinWilfTree();
+        initState = [1n, 1n];
+        nextStateFn = (s0, s1) => s0 + s1;
+        valueFn = (s0, s1, s2) => [s0, s1];
         break;
       default:
         throw('Unknown tree type: ' + type);
     };
+
+    const drawTreeRec = (d, expD, i, s0, s1) => {
+      const nodeId = i+expD;
+      const s2 = nextStateFn(s0, s1);
+      const v = valueFn(s0, s1, s2);
+      const rect = this._renderer.drawNode(d, i, v, nodeId === selectedNodeId);
+      if (rect !== null) {
+        this._addNodeHitbox(nodeId, rect);
+        i <<= 1n;
+        expD <<= 1n;
+        d++;
+        drawTreeRec(d, expD, i,    s0, s2);
+        drawTreeRec(d, expD, i+1n, s2, s1);
+      }
+    };
+    drawTreeRec(0n, 1n, 0n, ...initState);
   }
 
   _isInsideNode(coord, nodeId) {
@@ -235,9 +224,8 @@ class Viewport {
   SIZE = Math.pow(2, 16);
   MIN_SCALE = BigInt(Math.floor(this.SIZE * 0.95));
 
-  constructor(canvas, onUpdate, onHover) {
-    this._onUpdate = onUpdate;
-    this._onHover = onHover;
+  constructor(canvas) {
+    this._onUpdate = null;
     this._canvas = canvas;
 
     this.scale = this.MIN_SCALE;
@@ -249,14 +237,10 @@ class Viewport {
 
     this._setUpMouseWheel(canvas);
     this._setUpMouseDrag(canvas);
-    this._setUpHover(canvas);
   }
 
-  _setUpHover(canvas) {
-    canvas.onmousemove = (e) => {
-      const coord = this.clientXYToCoord(e.clientX, e.clientY);
-      this._onHover(coord);
-    };
+  setUpdateCallback(onUpdate) {
+    this._onUpdate = onUpdate;
   }
 
   _setUpMouseDrag(canvas) {
@@ -367,10 +351,14 @@ class Viewport {
 }
 
 class ControlPanel {
-  constructor(onUpdate) {
-    this._onUpdate = onUpdate;
+  constructor() {
+    this._onUpdate = null;
     this._treeSelect = document.getElementById('tree-type');
     this._treeSelect.onchange = () => this._update();
+  }
+
+  setUpdateCallback(onUpdate) {
+    this._onUpdate = onUpdate;
   }
 
   treeType() {
@@ -378,13 +366,16 @@ class ControlPanel {
   }
 
   _update() {
-    this._onUpdate();
+    if (this._onUpdate) this._onUpdate();
   }
 }
 
 class NodeInfoView {
   constructor() {
     this._container = document.getElementById('node-info');
+
+    this._currentNode = null;
+    this._currentTreeType = null;
   }
 
   _runLengthEncode(nodeIdStr) {
@@ -511,7 +502,7 @@ class NodeInfoView {
     container.appendChild(div);
   }
 
-  _showNode(nodeId, treeType) {
+  _showNode(treeType, nodeId) {
     const nodeIdStr = nodeId.toString(2);
     const rle = this._runLengthEncode(nodeIdStr);
     const cf = this._toContinuedFraction(rle, treeType);
@@ -531,7 +522,13 @@ class NodeInfoView {
     MathJax.typeset([container]);
   }
 
-  showNode(nodeId, treeType) {
+  showNode(treeType, nodeId) {
+    if (nodeId == this._currentNode && this._currentTreeType == treeType) {
+      return;
+    }
+    this._currentNode = nodeId;
+    this._currentTreeType = treeType;
+
     // Clear the container.
     while (this._container.firstChild) {
       this._container.removeChild(this._container.firstChild);
@@ -539,7 +536,61 @@ class NodeInfoView {
 
     if (!nodeId) return;
 
-    this._showNode(nodeId, treeType);
+    this._showNode(treeType, nodeId);
+  }
+}
+
+class Controller {
+  constructor(canvas, controlPanel, nodeInfoView) {
+    this.update = deferUntilAnimationFrame(this.update.bind(this));
+
+    this._canvas = canvas;
+    this._viewport = new Viewport(canvas);
+    this._viewport.setUpdateCallback(() => this.update());
+
+    let renderer = new Renderer(canvas, this._viewport);
+    this._tree = new Tree(renderer);
+
+    this._debugDiv = document.getElementById('debug-info');
+    this._controlPanel = controlPanel;
+    this._controlPanel.setUpdateCallback(() => {
+      this._treeType = this._controlPanel.treeType();
+      this.update();
+    });
+    this._nodeInfoView = nodeInfoView;
+
+    this._treeType = this._controlPanel.treeType();
+
+    this._setUpHover();
+  }
+
+  update() {
+    this._tree.draw(this._treeType, this._selectedNode);
+    this._nodeInfoView.showNode(this._treeType, this._selectedNode);
+  }
+
+  _setUpHover() {
+    const onHover = deferUntilAnimationFrame((coord) => {
+      this._debugDiv.textContent = `(${coord.x}, ${coord.y}) ${coord.scale}`;
+
+      const nodeId = this._tree.findNode(coord);
+
+      if (this._selectedNode == nodeId) return;
+      this._selectedNode = nodeId;
+
+      this._tree.selectNode(nodeId);
+      if (nodeId) {
+        this._canvas.style = 'cursor: pointer';
+      } else {
+        this._canvas.style = 'cursor: auto';
+      }
+      this.update();
+    });
+
+    this._canvas.onmousemove = (e) => {
+      const coord = this._viewport.clientXYToCoord(e.clientX, e.clientY);
+      onHover(coord);
+    };
   }
 }
 
@@ -548,42 +599,12 @@ const main = () => {
   canvas.height = document.body.clientHeight;
   canvas.width = document.body.clientWidth;
 
-  let tree = null;
-  let controlPanel = null;
-  const redraw = deferUntilAnimationFrame(() => {
-    tree.draw(controlPanel.treeType());
-  });
   let nodeInfoView = new NodeInfoView();
+  let controlPanel = new ControlPanel();
 
-  let debugDiv = document.getElementById('debug-info');
+  let controller = new Controller(canvas, controlPanel, nodeInfoView);
 
-  let selectedNode = 0n;
-  let treeType = '';
-  const hover = deferUntilAnimationFrame((coord) => {
-    debugDiv.textContent = `(${coord.x}, ${coord.y}) ${coord.scale}`;
-    const nodeId = tree.findNode(coord);
-    const type = controlPanel.treeType();
-    if (selectedNode == nodeId && treeType == type) return;
-    selectedNode = nodeId;
-    treeType = type;
-
-    tree.selectNode(nodeId);
-    if (nodeId) {
-      canvas.style = 'cursor: pointer';
-    } else {
-      canvas.style = 'cursor: auto';
-    }
-    nodeInfoView.showNode(nodeId, treeType);
-    redraw();
-  });
-
-  let viewport = new Viewport(canvas, redraw, hover);
-
-  controlPanel = new ControlPanel(redraw);
-  let renderer = new Renderer(canvas, viewport);
-  tree = new Tree(renderer);
-
-  redraw();
+  controller.update();
 };
 main();
 
