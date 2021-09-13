@@ -23,6 +23,10 @@
   gap: 10px;
 }
 
+.frac-display {
+  font-size: 32;
+}
+
 .info-title {
   line-height: 1;
   font-size: 12;
@@ -30,8 +34,14 @@
   max-width: 450px;
 }
 
+/* Allow scrolling, but hide the scrollbar. */
 .info-item {
-  overflow: scroll;
+  overflow-x: scroll;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.info-item::-webkit-scrollbar {
+    display: none; /* for Chrome, Safari, and Opera */
 }
 
 select {

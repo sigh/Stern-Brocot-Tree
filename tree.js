@@ -175,7 +175,7 @@ class Tree {
     drawTreeRec(0n, 1n, 0n, ...initState);
   }
 
-  _isInsideNode(coord, nodeId) {
+  isInsideNodeId(coord, nodeId) {
     const rect = this._hitboxes[nodeId];
     if (rect === undefined) return false;
 
@@ -184,19 +184,12 @@ class Tree {
         && coord.canvasY < rect[1] + rect[3]);
   }
 
-  findNode(coord) {
+  findNodeIdAtCoord(coord) {
     const scale = coord.scale;
 
     // Make sure we are within the tree.
     if (coord.x <= 0n || coord.x >= scale || coord.y <= 0 || coord.y >= scale) {
       return null;
-    }
-
-    // Check if we are within the currently selected node.
-    if (this._selectedNode) {
-      if (this._isInsideNode(coord, this._selectedNode)) {
-        return this._selectedNode;
-      }
     }
 
     // Find the depth.
@@ -209,14 +202,10 @@ class Tree {
     // Find the node.
     const nodeId = i + (1n << d);
 
-    if (this._isInsideNode(coord, nodeId)) {
+    if (this.isInsideNodeId(coord, nodeId)) {
       return nodeId;
     }
     return null;
-  }
-
-  selectNode(nodeId) {
-    this._selectedNode = nodeId || 0n;
   }
 }
 
@@ -508,8 +497,9 @@ class NodeInfoView {
     const cf = this._toContinuedFraction(rle, treeType);
 
     let container = this._container;
-    this._addItem(container, '',
-                  this._renderFrac(...this._evalContinuedFrac(cf)));
+    let frac = this._renderFrac(...this._evalContinuedFrac(cf));
+    frac.classList.add('frac-display');
+    this._addItem(container, '', frac);
     this._addItem(container, 'Depth',
                   this._makeTextElem('div', nodeIdStr.length-1));
     this._addItem(container, 'Index',
@@ -560,25 +550,34 @@ class Controller {
     this._nodeInfoView = nodeInfoView;
 
     this._treeType = this._controlPanel.treeType();
+    this._hoverNodeId = null;
+    this._selectedNodeId = null;
 
-    this._setUpHover();
+    this._setUpSelection();
   }
 
   update() {
-    this._tree.draw(this._treeType, this._selectedNode);
-    this._nodeInfoView.showNode(this._treeType, this._selectedNode);
+    const highlighedNodeId = this._selectedNodeId || this._hoverNodeId;
+    this._tree.draw(this._treeType, highlighedNodeId);
+    this._nodeInfoView.showNode(this._treeType, highlighedNodeId);
   }
 
-  _setUpHover() {
-    const onHover = deferUntilAnimationFrame((coord) => {
+  _setUpSelection() {
+    const updateDebug = deferUntilAnimationFrame((coord) => {
       this._debugDiv.textContent = `(${coord.x}, ${coord.y}) ${coord.scale}`;
+    });
 
-      const nodeId = this._tree.findNode(coord);
+    const updateSelection = deferUntilAnimationFrame((coord) => {
+      // Check if we are still in the same node.
+      if (this._hoverNodeId) {
+        if (this._tree.isInsideNodeId(coord, this._hoverNodeId)) return;
+      }
 
-      if (this._selectedNode == nodeId) return;
-      this._selectedNode = nodeId;
+      const nodeId = this._tree.findNodeIdAtCoord(coord);
 
-      this._tree.selectNode(nodeId);
+      if (this._hoverNodeId == nodeId) return;
+      this._hoverNodeId = nodeId;
+
       if (nodeId) {
         this._canvas.style = 'cursor: pointer';
       } else {
@@ -589,7 +588,14 @@ class Controller {
 
     this._canvas.onmousemove = (e) => {
       const coord = this._viewport.clientXYToCoord(e.clientX, e.clientY);
-      onHover(coord);
+
+      updateSelection(coord);
+      updateDebug(coord);
+    };
+
+    this._canvas.onclick = (e) => {
+      this._selectedNodeId = this._hoverNodeId;
+      this.update();
     };
   }
 }
