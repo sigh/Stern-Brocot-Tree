@@ -64,6 +64,33 @@ class Renderer {
     ctx.stroke();
   }
 
+  centeredNodePosition(d, i) {
+    const viewport = this._viewport;
+
+    // Determine what our target size is, but we may have to adjust if the
+    // scale is too small.
+    const targetNodeHeight = this._canvas.height/4;
+    const targetLayerHeight = viewport.fromCanvasY(targetNodeHeight);
+    let scale = targetLayerHeight << (d+1n);
+    if (scale < viewport.MIN_SCALE) scale = viewport.MIN_SCALE;
+
+    const layerHeight = scale >> (d+1n);
+
+    const xMid = ((i * scale) >> d) + layerHeight;
+    const yMid = layerHeight + layerHeight/2n;
+
+    const screenMidY = viewport.fromCanvasY(this._canvas.height/2);
+    const screenMidX = viewport.fromCanvasX(this._canvas.width/2);
+
+    return {
+      scale: scale,
+      origin: {
+        x: xMid - screenMidX,
+        y: scale - yMid - screenMidY,
+      },
+    }
+  }
+
   drawNode(d, i, r, selected) {
     const viewport = this._viewport;
     const scale = viewport.scale;
@@ -207,6 +234,55 @@ class Tree {
     }
     return null;
   }
+
+  // The inverse nodeId finds the eqivalent node in the other tree type.
+  inverseNodeId(nodeId) {
+    let nodeIdChars = [...nodeId.toString(2)];
+
+    // Reverse and remove the old leading '1'.
+    nodeIdChars.reverse();
+    nodeIdChars.pop();
+
+    return BigInt('0b1' + nodeIdChars.join(''));
+  }
+
+  nodeForContinuousFraction(treeType, cf) {
+    let nodeIndex = 0n;
+
+    let isRight = true;
+    let d = 0n;
+    const maxD = 500n;
+    for (let i = 0; i < cf.length; i++) {
+      if (maxD - d < cf[i]) {
+        break;
+      }
+
+      nodeIndex <<= cf[i];
+      if (isRight) nodeIndex |= (1n << cf[i])-1n;
+      d += cf[i];
+
+      isRight = !isRight;
+    }
+
+    // Reduce last cf entry by 1.
+    d--;
+    nodeIndex >>= 1n;
+    let nodeId = nodeIndex | (1n << d);
+
+    if (treeType == 'calkin-wilf') {
+      nodeId = this.inverseNodeId(nodeId);
+      nodeIndex = nodeId ^ (1n << d);
+    }
+
+    const pos = this._renderer.centeredNodePosition(d, nodeIndex);
+
+    return {
+      nodeId: nodeId,
+      d: d,
+      scale: pos.scale,
+      origin: pos.origin,
+    }
+  }
 }
 
 class Viewport {
@@ -217,12 +293,9 @@ class Viewport {
     this._onUpdate = null;
     this._canvas = canvas;
 
-    this.scale = this.MIN_SCALE;
-
-    // Offset origin so the tree is centered.
-    const offset =
-      -(BigInt(Math.floor(this._pixelScale()*canvas.width)) - this.MIN_SCALE) / 2n;
-    this.origin = {x: offset, y: 0n};
+    this.origin = {x: 0n, y: 0n};
+    this.scale = 0n;
+    this.resetPosition();
 
     this._setUpMouseWheel(canvas);
     this._setUpMouseDrag(canvas);
@@ -300,6 +373,22 @@ class Viewport {
     };
   }
 
+  resetPosition() {
+    // Offset origin so the tree is centered.
+    const offset =
+      -(BigInt(Math.floor(this._pixelScale()*this._canvas.width)) - this.MIN_SCALE) / 2n;
+    this.origin.x = offset;
+    this.origin.y = 0n;
+    this.scale = this.MIN_SCALE;
+  }
+
+  setPosition(origin, scale) {
+    this.origin.x = origin.x;
+    this.origin.y = origin.y;
+    this.scale = scale < this.MIN_SCALE ? this.MIN_SCALE : scale;
+    this._clampPosition();
+  }
+
   _pixelScale() {
     return this.SIZE / this._canvas.height;
   }
@@ -311,16 +400,26 @@ class Viewport {
     return Number(y) * this._canvas.height / this.SIZE;
   }
 
+  fromCanvasY(canvasY) {
+    return BigInt(Math.floor(canvasY * this.SIZE / this._canvas.height));
+  }
+  fromCanvasX(canvasX) {
+    return BigInt(Math.floor(canvasX * this.SIZE / this._canvas.height));
+  }
+
   _canvasOrigin() {
     const bb = this._canvas.getBoundingClientRect();
     return {x: bb.x, y: bb.y};
   }
 
-  _update() {
+  _clampPosition() {
     // Clamp the y direction so that we can easily zoom in without running
     // off the bottom of the tree.
     this.origin.y = clamp(this.origin.y, 0n, this.scale - this.MIN_SCALE);
+  }
 
+  _update() {
+    this._clampPosition();
     this._onUpdate();
   }
 
@@ -339,15 +438,131 @@ class Viewport {
   }
 }
 
+class MathHelpers {
+  // Find integers `sign`, `int` and `exponent` such that:
+  //   x = (-1**sign) * int * 2**exponent
+  static getFloatParts(x) {
+    let float = new Float64Array(1);
+    let bytes = new Uint8Array(float.buffer);
+
+    float[0] = x;
+
+    const sign = bytes[7] >> 7;
+    const exponent = BigInt(
+      ((bytes[7] & 0x7f) << 4 | bytes[6] >> 4) - 0x3ff - 52);
+
+    let n = BigInt((bytes[6] & 0x0f) | 0x10);
+    for (let i = 5; i >= 0; i--) {
+      n = (n << 8n) | BigInt(bytes[i]);
+    }
+
+    return {
+      sign: sign,
+      exponent: exponent,
+      int: n,
+    }
+  }
+
+  // Find the continued fraction for p/q
+  // `p` and `q` MUST be BigInts.
+  static findContinuedFractionBigInt(p, q) {
+    let rem = p%q;
+    let aList = [p/q]
+
+    while (rem) {
+      [p, q] = [q, rem];
+      rem = p%q;
+      aList.push(p/q);
+    }
+
+    return aList;
+  }
+
+  static evalContinuedFrac(cf) {
+    let [a, b] = [1n, 0n];
+    for (let i = cf.length-1; i>=0 ; i--) {
+      [a, b] = [a*BigInt(cf[i]) + b, a];
+    }
+    return [a,b];
+  }
+
+  static _DECIMAL_DIGITS = 15n;
+  static _DECIMAL_SCALE = 10n**15n;
+
+  static fracToDecimal(a, b) {
+    const intStr = (a/b).toString();
+    const rem = a%b;
+
+    if (rem == 0) return intStr;
+
+    // Scale remainder by the number of decimal places.
+    const scaledRem = rem * this._DECIMAL_SCALE;
+    // Determine the digits, adding ellipses if there are still more.
+    let fracStr = (scaledRem / b).toString();
+    if (scaledRem % b !== 0n) fracStr += '…';
+    // Truncate trailing zeros.
+    fracStr = fracStr.replace(/0+$/, '');
+
+    return intStr + '.' + fracStr;
+  }
+}
+
 class ControlPanel {
   constructor() {
     this._onUpdate = null;
     this._treeSelect = document.getElementById('tree-type');
     this._treeSelect.onchange = () => this._update();
+    this._targetContinuedFraction = null;
+
+    this._setUpFinder();
   }
 
   setUpdateCallback(onUpdate) {
     this._onUpdate = onUpdate;
+  }
+
+  _setUpFinder() {
+    let reset = document.getElementById('reset-zoom');
+    reset.onclick = () => {
+      // Just reset the zoom by setting the target to 0.
+      this._targetContinuedFraction = [];
+      this._update();
+      return false;
+    };
+
+    let findExp = document.getElementById('find-expression');
+    let form = document.getElementById('find-form');
+    form.onsubmit = (e) => {
+      e.preventDefault();
+
+      const value = Function('"use strict";return (' + findExp.value + ')')();
+
+      let cf = null;
+
+      if (typeof value == 'number') {
+        // Determine the exact value of the floating point value.
+        const floatParts = MathHelpers.getFloatParts(value);
+        cf = floatParts.exponent >= 0
+          ? floatParts.int << floatParts.exponent
+          : MathHelpers.findContinuedFractionBigInt(
+              floatParts.int, 1n << -floatParts.exponent);
+      } else if (Array.isArray(value)) {
+        // Interpret array as continued fraction cooeficients.
+        cf = value.map(BigInt);
+      }
+
+      this._targetContinuedFraction = cf;
+
+      this._update();
+
+      return false;
+    };
+  }
+
+  popTargetContinuedFraction() {
+    let f = this._targetContinuedFraction;
+    this._targetContinuedFraction = null;
+    return f;
   }
 
   treeType() {
@@ -393,14 +608,6 @@ class NodeInfoView {
 
     cf[cf.length-1]++;
     return cf;
-  }
-
-  _evalContinuedFrac(cf) {
-    let [a, b] = [1n, 0n];
-    for (let i = cf.length-1; i>=0 ; i--) {
-      [a, b] = [a*BigInt(cf[i]) + b, a];
-    }
-    return [a,b];
   }
 
   _makeTextElem(type, text) {
@@ -495,11 +702,14 @@ class NodeInfoView {
     const nodeIdStr = nodeId.toString(2);
     const rle = this._runLengthEncode(nodeIdStr);
     const cf = this._toContinuedFraction(rle, treeType);
+    const f = MathHelpers.evalContinuedFrac(cf);
 
     let container = this._container;
-    let frac = this._renderFrac(...this._evalContinuedFrac(cf));
-    frac.classList.add('frac-display');
-    this._addItem(container, '', frac);
+    let fracElem = this._renderFrac(...f);
+    fracElem.classList.add('frac-display');
+    this._addItem(container, '', fracElem);
+    this._addItem(container, 'Decimal',
+                  this._makeTextElem('div', MathHelpers.fracToDecimal(...f)));
     this._addItem(container, 'Depth',
                   this._makeTextElem('div', nodeIdStr.length-1));
     this._addItem(container, 'Index',
@@ -557,6 +767,22 @@ class Controller {
   }
 
   update() {
+    const targetContinuedFraction = this._controlPanel.popTargetContinuedFraction();
+    if (targetContinuedFraction !== null) {
+      if (targetContinuedFraction.length > 0) {
+        console.log(targetContinuedFraction);
+        const node = this._tree.nodeForContinuousFraction(
+          this._treeType, targetContinuedFraction);
+        this._selectedNodeId = node.nodeId;
+        if (node.nodeId) {
+          this._viewport.setPosition(node.origin, node.scale);
+        }
+      } else {
+        // Reset the zoom.
+        this._viewport.resetPosition();
+      }
+    }
+
     const highlighedNodeId = this._selectedNodeId || this._hoverNodeId;
     this._tree.draw(this._treeType, highlighedNodeId);
     this._nodeInfoView.showNode(this._treeType, highlighedNodeId);
@@ -564,7 +790,7 @@ class Controller {
 
   _setUpSelection() {
     const updateDebug = deferUntilAnimationFrame((coord) => {
-      this._debugDiv.textContent = `(${coord.x}, ${coord.y}) ${coord.scale}`;
+      // this._debugDiv.textContent = `(${coord.x}, ${coord.y}) ${coord.scale}`;
     });
 
     const updateSelection = deferUntilAnimationFrame((coord) => {
