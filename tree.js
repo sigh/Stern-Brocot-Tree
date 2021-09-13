@@ -110,60 +110,77 @@ class Renderer {
   static _PATH_COLOR = '#0000aa';
   static _SELECTED_COLOR = '#0099ff';
 
-  drawNode(d, i, r, selectionType) {
+  depthRange() {
+    // TODO: Optimize logs.
+    //  - factor them out.
+    //  - keep track of log scale?
+    //  - change origin.y to not require inverting by scale.
     const viewport = this._viewport;
     const scale = viewport.scale;
     const origin = viewport.origin;
 
-    const layerHeight = scale >> (d+1n);
+    // Exclude nodes which are above the viewport.
+    const minD = MathHelpers.log2BigInt(scale/(scale-origin.y)) - 1n;
 
-    const xMin = (i * scale) >> d;
-    const xMax = xMin + layerHeight*2n;
-    if (viewport.toCanvasX(xMin - origin.x) >= this._canvas.width ||
-        xMax - origin.x <= 0n) {
-      // This entire subtree is outside of the viewport, so stop.
-      return null;
+    // Exclude nodes which are too small.
+    const minNodeHeight = 0.5;
+    const minLayerHeight = viewport.fromCanvasY(minNodeHeight);
+    let maxD = MathHelpers.log2BigInt(scale/minLayerHeight) - 1n;
+
+    // Exclude nodes which are below the viewport.
+    // If targetYCoord  <= 0, then the whole tree is visible.
+    const targetYMin = scale - origin.y - viewport.fromCanvasY(this._canvas.height);
+    if (targetYMin > 0) {
+      const maxViewportD = MathHelpers.log2BigInt(scale/targetYMin) + 1n;
+      if (maxViewportD < maxD) maxD = maxViewportD;
     }
+
+    return [minD, maxD];
+  }
+
+  xRange() {
+    const viewport = this._viewport;
+    const origin = viewport.origin;
+
+    return [origin.x, viewport.fromCanvasX(this._canvas.width) + origin.x];
+  }
+
+  initialLayerWidth() {
+    return this._viewport.scale;
+  }
+
+  drawNode(d, xMin, layerWidth, frac, selectionType) {
+    const viewport = this._viewport;
+    const scale = viewport.scale;
+    const origin = viewport.origin;
+
+    const layerHeight = layerWidth >> 1n;
 
     const yMin = layerHeight;
-    const yMinCoord = viewport.toCanvasY(scale - yMin - origin.y);
     const nodeHeight = viewport.toCanvasY(layerHeight);
 
-    let rect = [0, 0, 0, 0];
+    const x = xMin + layerHeight;
+    const canvasX = viewport.toCanvasX(x - origin.x);
 
-    if (yMinCoord > -nodeHeight) {
-      const x = xMin + layerHeight;
-      const canvasX = viewport.toCanvasX(x - origin.x);
+    const canvasYMin = viewport.toCanvasY(scale - yMin - origin.y);
+    const canvasYMid = canvasYMin - nodeHeight*0.5;
 
-      const canvasYMin = viewport.toCanvasY(scale - yMin - origin.y);
-      const canvasYMid = canvasYMin - nodeHeight*0.5;
+    // Draw the branches.
+    let ctx = this._ctx;
+    this._drawBranches(ctx, canvasX, canvasYMid, nodeHeight, selectionType);
 
-      let ctx = this._ctx;
-      this._drawBranches(ctx, canvasX, canvasYMid, nodeHeight, selectionType);
-
-      if (yMinCoord > 0) {
-        if (selectionType) {
-          ctx.save();
-          const color = selectionType === Renderer.SELECT_FINAL
-            ? Renderer._SELECTED_COLOR : Renderer._PATH_COLOR;
-          ctx.fillStyle = color;
-          ctx.strokeStyle = color;
-        }
-        rect = this._drawFraction(r, canvasX, canvasYMid, nodeHeight);
-        if (selectionType) ctx.restore();
-      }
+    // Draw the fraction.
+    if (selectionType) {
+      ctx.save();
+      const color = selectionType === Renderer.SELECT_FINAL
+        ? Renderer._SELECTED_COLOR : Renderer._PATH_COLOR;
+      ctx.fillStyle = color;
+      ctx.strokeStyle = color;
     }
+    let rect = this._drawFraction(frac, canvasX, canvasYMid, nodeHeight);
+    if (selectionType) ctx.restore();
 
-    if (rect[3] !== 0) return rect;
-
-    // Don't continue further if:
-    //  - The node size is too small.
-    //  - We are past the bottom of the viewport.
-    if ((nodeHeight > 0.5) && (yMinCoord < this._canvas.height)) {
-      return rect;
-    } else {
-      return null;
-    }
+    return rect;
   }
 
 }
@@ -182,10 +199,8 @@ class Tree {
   }
 
   _addNodeHitbox(d, i, rect) {
-    if (rect[3] !== 0) {
-      const nodeId = i | (1n << d);
-      this._hitboxes.set(nodeId, rect);
-    }
+    const nodeId = i | (1n << d);
+    this._hitboxes.set(nodeId, rect);
   }
 
   draw(type, selectedNodeId) {
@@ -211,12 +226,17 @@ class Tree {
         throw('Unknown tree type: ' + type);
     };
 
+    let renderer = this._renderer;
+
     let selectedBranches = selectedNodeId.toString(2);
-    let stack = [[0n, 0n, ...initState, selectedNodeId > 0]];
+    let stack = [[0n, 0n, 0n, renderer.initialLayerWidth(), ...initState, selectedNodeId > 0]];
+    let [minD, maxD] = renderer.depthRange();
+    let [minX, maxX] = renderer.xRange();
 
     while (stack.length) {
-      let [d, i, s0, s1, onSelectedBranch] = stack.pop();
+      let [d, i, xStart, layerWidth, s0, s1, onSelectedBranch] = stack.pop();
       this._nodesProcessed++;
+
       const s2 = nextStateFn(s0, s1);
       const v = valueFn(s0, s1, s2);
 
@@ -230,13 +250,22 @@ class Tree {
         }
       }
 
-      const rect = this._renderer.drawNode(d, i, v, selectionType);
-      if (rect !== null) {
+      if (d >= minD) {
+        const rect = renderer.drawNode(d, xStart, layerWidth, v, selectionType);
         this._addNodeHitbox(d, i, rect);
-        i <<= 1n;
-        d++;
-        stack.push([d, i,    s0, s2, selectionType === Renderer.SELECT_LEFT]);
-        stack.push([d, i+1n, s2, s1, selectionType === Renderer.SELECT_RIGHT]);
+      }
+
+      i <<= 1n;
+      d++;
+      layerWidth >>= 1n;
+      if (d < maxD) {
+        const xMid = xStart+layerWidth;
+        if (xMid > minX) {
+          stack.push([d, i,    xStart, layerWidth, s0, s2, selectionType === Renderer.SELECT_LEFT]);
+        }
+        if (xMid < maxX) {
+          stack.push([d, i+1n, xMid,   layerWidth, s2, s1, selectionType === Renderer.SELECT_RIGHT]);
+        }
       }
     }
   }
@@ -260,7 +289,7 @@ class Tree {
 
     // Find the depth.
     const expD = scale/coord.y;
-    const d = BigInt(expD.toString(2).length - 1);
+    const d = MathHelpers.log2BigInt(expD);
 
     // Find the index within the layer.
     const i = (coord.x << d) / scale;
@@ -290,7 +319,7 @@ class Tree {
 
     let isRight = true;
     let d = 0n;
-    const maxD = 1n << 13;
+    const maxD = 1n << 16n;
     for (let i = 0; i < cf.length; i++) {
       if (maxD - d < cf[i]) {
         break;
@@ -484,75 +513,6 @@ class Viewport {
             canvasY: canvasY,
             scale: this.scale,
            };
-  }
-}
-
-class MathHelpers {
-  // Find integers `sign`, `int` and `exponent` such that:
-  //   x = (-1**sign) * int * 2**exponent
-  static getFloatParts(x) {
-    let float = new Float64Array(1);
-    let bytes = new Uint8Array(float.buffer);
-
-    float[0] = x;
-
-    const sign = bytes[7] >> 7;
-    const exponent = BigInt(
-      ((bytes[7] & 0x7f) << 4 | bytes[6] >> 4) - 0x3ff - 52);
-
-    let n = BigInt((bytes[6] & 0x0f) | 0x10);
-    for (let i = 5; i >= 0; i--) {
-      n = (n << 8n) | BigInt(bytes[i]);
-    }
-
-    return {
-      sign: sign,
-      exponent: exponent,
-      int: n,
-    }
-  }
-
-  // Find the continued fraction for p/q
-  // `p` and `q` MUST be BigInts.
-  static findContinuedFractionBigInt(p, q) {
-    let rem = p%q;
-    let aList = [p/q]
-
-    while (rem) {
-      [p, q] = [q, rem];
-      rem = p%q;
-      aList.push(p/q);
-    }
-
-    return aList;
-  }
-
-  static evalContinuedFrac(cf) {
-    let [a, b] = [1n, 0n];
-    for (let i = cf.length-1; i>=0 ; i--) {
-      [a, b] = [a*BigInt(cf[i]) + b, a];
-    }
-    return [a,b];
-  }
-
-  static _DECIMAL_DIGITS = 15n;
-  static _DECIMAL_SCALE = 10n**15n;
-
-  static fracToDecimal(a, b) {
-    const intStr = (a/b).toString();
-    const rem = a%b;
-
-    if (rem == 0) return intStr;
-
-    // Scale remainder by the number of decimal places.
-    const scaledRem = rem * this._DECIMAL_SCALE;
-    // Determine the digits, adding ellipses if there are still more.
-    let fracStr = (scaledRem / b).toString();
-    if (scaledRem % b !== 0n) fracStr += '…';
-    // Truncate trailing zeros.
-    fracStr = fracStr.replace(/0+$/, '');
-
-    return intStr + '.' + fracStr;
   }
 }
 
