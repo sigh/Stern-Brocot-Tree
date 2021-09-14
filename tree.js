@@ -222,6 +222,24 @@ class Tree {
     this._renderer = renderer;
     this._hitboxes = new Map();
     this._nodesProcessed = 0;
+
+    this._cache = {
+      valid: false,
+      treeType: null,
+    };
+
+    this._treeConfigs = {
+      'stern-brocot': {
+        initState: [[0n,1n], [1n,0n]],
+        nextStateFn: (s0, s1) => [s0[0] + s1[0], s0[1] + s1[1]],
+        valueFn: (s0, s1, s2) => s2,
+      },
+      'calkin-wilf': {
+        initState: [1n, 1n],
+        nextStateFn: (s0, s1) => s0 + s1,
+        valueFn: (s0, s1, s2) => [s0, s1],
+      }
+    };
   }
 
   _resetTree() {
@@ -238,48 +256,56 @@ class Tree {
   draw(type, selectedNodeId) {
     this._resetTree();
 
-    let nextStateFn = null;
-    let valueFn = null;
-    let initState = null;
     selectedNodeId = selectedNodeId || 0n;
 
-    switch (type) {
-      case 'stern-brocot':
-        initState = [[0n,1n], [1n,0n]]
-        nextStateFn = (s0, s1) => [s0[0] + s1[0], s0[1] + s1[1]];
-        valueFn = (s0, s1, s2) => s2;
-        break;
-      case 'calkin-wilf':
-        initState = [1n, 1n];
-        nextStateFn = (s0, s1) => s0 + s1;
-        valueFn = (s0, s1, s2) => [s0, s1];
-        break;
-      default:
-        throw('Unknown tree type: ' + type);
-    };
+    const config = this._treeConfigs[type];
 
-    this._drawTree(selectedNodeId, initState, nextStateFn, valueFn);
+    if (this._cache.treeType != type) {
+      this._cache.valid = false;
+      this._cache.treeType = type;
+    }
+
+    this._drawTree(selectedNodeId, config);
   }
 
-   _drawTree(selectedNodeId, initState, nextStateFn, valueFn) {
-    let renderer = this._renderer;
+  // Find all nodes where depth == minD.
+  // The final positions don't depend on the viewport so can be cached.
+  _findInitialNodes(minD, expMinD, xRange, config) {
+    const [minI, maxI] = this._renderer.iRange(minD, expMinD, xRange);
 
-    let [minD, maxD] = renderer.depthRange();
-    const expMinD = 1n << minD;
+    let stack = [];
 
-    let [minX, maxX] = renderer.xRange();
-    let [minI, maxI] = renderer.iRange(minD, expMinD, [minX, maxX]);
+    // Try to initialize the stack with the cache.
+    // As long as the cache completely covers the current set we can use it.
+    let cache = this._cache;
+    if (cache.valid && minD >= cache.minD) {
+      const diffD = minD - cache.minD;
+      const targetMinI = minI >> diffD;
+      const targetMaxI = ((maxI-1n) >> diffD) + 1n;
+      if (targetMinI >= cache.minI && targetMaxI <= cache.maxI) {
+        const iWidth = 1n << diffD;
+        for (let j = 0; j < cache.initialNodes.length; j++) {
+          const [iStart, s0, s1] = cache.initialNodes[j];
+          if (iStart >= targetMinI && iStart < targetMaxI) {
+            stack.push([iStart << diffD, iWidth, s0, s1]);
+          }
+        }
+      }
+    }
 
-    // Find all nodes where depth == minD.
-    // The final positions don't depend on the viewport so can be cached.
-    let drawStarts = [];
-    let stack = [[0n, expMinD, ...initState]];
+    // We didn't populate from the cache, so we have to start from the start.
+    if (!stack.length) {
+      stack.push([0n, expMinD, ...config.initState]);
+    }
+
+    const nextStateFn = config.nextStateFn;
+    let initialNodes = [];
     while (stack.length) {
       let [iStart, iWidth, s0, s1] = stack.pop();
       this._nodesProcessed++;
 
       if (iWidth == 1n) {
-        drawStarts.push([iStart, s0, s1]);
+        initialNodes.push([iStart, s0, s1]);
       } else {
         iWidth >>= 1n;
         const iMid = iStart + iWidth;
@@ -293,6 +319,26 @@ class Tree {
         }
       }
     }
+
+    cache.valid = true;
+    cache.minD = minD;
+    cache.minI = minI;
+    cache.maxI = maxI;
+    cache.initialNodes = initialNodes;
+
+    return initialNodes;
+  }
+
+  _drawTree(selectedNodeId, config) {
+    let renderer = this._renderer;
+
+    const [minD, maxD] = renderer.depthRange();
+    const expMinD = 1n << minD;
+    const xRange = renderer.xRange();
+    const [minX, maxX] = xRange;
+
+    // Find all the initial drawing nodes.
+    let drawStarts = this._findInitialNodes(minD, expMinD, xRange, config);
     this._numDrawStarts = drawStarts.length;
 
     // Determine if there is a selected node prefix to start matching on.
@@ -305,6 +351,7 @@ class Tree {
     }
 
     // Set up the drawing stack.
+    let stack = [];
     const layerWidth = this._renderer.layerWidth(minD);
     for (let j = 0; j < drawStarts.length; j++) {
       const [i, s0, s1] = drawStarts[j];
@@ -317,6 +364,8 @@ class Tree {
     }
 
     // Draw nodes.
+    const valueFn = config.valueFn;
+    const nextStateFn = config.nextStateFn;
     while (stack.length) {
       let [d, i, xStart, layerWidth, s0, s1, onSelectedBranch] = stack.pop();
       this._nodesProcessed++;
@@ -401,7 +450,7 @@ class Tree {
 
     let isRight = true;
     let d = 0n;
-    const maxD = 1n << 16n;
+    const maxD = 1n << 18n;
     for (let i = 0; i < cf.length; i++) {
       if (maxD - d < cf[i]) {
         break;
