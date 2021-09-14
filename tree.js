@@ -3,14 +3,14 @@ class Renderer {
     this._canvas = canvas;
 
     this._ctx = canvas.getContext('2d');
-    this._ctx.textAlign = 'center';
-    this._ctx.textBaseline = 'middle';
 
     this._viewport = viewport;
   }
 
-  clearCanvas() {
+  resetCanvas() {
     this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
+    this._ctx.textAlign = 'center';
+    this._ctx.textBaseline = 'middle';
   };
 
   _drawBar(ctx, x, y, length, width) {
@@ -243,7 +243,7 @@ class Tree {
   }
 
   _resetTree() {
-    this._renderer.clearCanvas();
+    this._renderer.resetCanvas();
     this._hitboxes.clear();
     this._nodesProcessed = 0;
   }
@@ -543,40 +543,44 @@ class Viewport {
     return this._dragDistance > 1;
   }
 
-  _setUpMouseWheel(canvas) {
+  _rescale(ds, canvasX, canvasY) {
     let origin = this.origin;
 
+    // Remove offset from origin, so that it will be corretly handled when
+    // scaling.
+    let pixelScale = this._pixelScale();
+    origin.x += BigInt(Math.floor(pixelScale * canvasX));
+    origin.y -= BigInt(Math.floor(pixelScale * canvasY));
+
+    // Scale by 2**ds. Scale ds by 2**x so that we only deal with integers.
+    const f = 5n;
+    let dsF = BigInt(Math.floor(Math.pow(2, Number(f) + ds)));
+    this.scale = this.scale * dsF >> f;
+    if (this.scale < this.MIN_SCALE) {
+      dsF = dsF * this.MIN_SCALE / this.scale;
+      this.scale = this.MIN_SCALE;
+    }
+    origin.x = origin.x * dsF >> f;
+    origin.y = origin.y * dsF >> f;
+
+    // Reoffset origin after scaling.
+    pixelScale = this._pixelScale();
+    origin.x -= BigInt(Math.floor(pixelScale * canvasX));
+    origin.y += BigInt(Math.floor(pixelScale * canvasY));
+  }
+
+  _setUpMouseWheel(canvas) {
     canvas.onwheel = (e) => {
       e.preventDefault();
+
+      // Clamp the delta, and ensure that we don't zoom out too far.
+      const ds = clamp(e.deltaY * 0.01, -0.5, 0.5);
 
       const canvasOrigin = this._canvasOrigin();
       const canvasX = e.clientX - canvasOrigin.x;
       const canvasY = e.clientY - canvasOrigin.y;
 
-      // Remove offset from origin, so that it will be corretly handled when
-      // scaling.
-      let pixelScale = this._pixelScale();
-      origin.x += BigInt(Math.floor(pixelScale * canvasX));
-      origin.y -= BigInt(Math.floor(pixelScale * canvasY));
-
-      // Clamp the delta, and ensure that we don't zoom out too far.
-      const ds = clamp(e.deltaY * 0.01, -0.5, 0.5);
-
-      // Scale by 2**ds. Scale ds by 2**x so that we only deal with integers.
-      const f = 5n;
-      let dsF = BigInt(Math.floor(Math.pow(2, Number(f) + ds)));
-      this.scale = this.scale * dsF >> f;
-      if (this.scale < this.MIN_SCALE) {
-        dsF = dsF * this.MIN_SCALE / this.scale;
-        this.scale = this.MIN_SCALE;
-      }
-      origin.x = origin.x * dsF >> f;
-      origin.y = origin.y * dsF >> f;
-
-      // Reoffset origin after scaling.
-      pixelScale = this._pixelScale();
-      origin.x -= BigInt(Math.floor(pixelScale * canvasX));
-      origin.y += BigInt(Math.floor(pixelScale * canvasY));
+      this._rescale(ds, canvasX, canvasY);
 
       this._update();
     };
@@ -906,6 +910,15 @@ class Controller {
     this._currentCoord = null;
 
     this._setUpSelection();
+
+    const resizeCanvas = () => {
+      this._canvas.height = document.body.clientHeight;
+      this._canvas.width = document.body.clientWidth;
+      this.update();
+    };
+    window.onresize = resizeCanvas;
+    resizeCanvas();
+    this._viewport.resetPosition();
   }
 
   update() {
@@ -977,10 +990,8 @@ class Controller {
   }
 }
 
-const main = () => {
+const initPage = () => {
   let canvas = document.getElementById('tree-vis');
-  canvas.height = document.body.clientHeight;
-  canvas.width = document.body.clientWidth;
 
   let nodeInfoView = new NodeInfoView();
   let controlPanel = new ControlPanel();
@@ -989,5 +1000,3 @@ const main = () => {
 
   controller.update();
 };
-main();
-
