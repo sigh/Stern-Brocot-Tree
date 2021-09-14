@@ -75,6 +75,14 @@ class Renderer {
     }
   }
 
+  layerWidth(d) {
+    return this._viewport.scale >> d;
+  }
+
+  xStart(d, i) {
+    return (i * this._viewport.scale) >> d;
+  }
+
   centeredNodePosition(d, i) {
     const viewport = this._viewport;
 
@@ -110,6 +118,8 @@ class Renderer {
   static _PATH_COLOR = '#0000aa';
   static _SELECTED_COLOR = '#0099ff';
 
+  // The range of depths visible in the current viewport.
+  // Returns the half-open interval [minD, maxD).
   depthRange() {
     // TODO: Optimize logs.
     //  - factor them out.
@@ -120,7 +130,8 @@ class Renderer {
     const origin = viewport.origin;
 
     // Exclude nodes which are above the viewport.
-    const minD = MathHelpers.log2BigInt(scale/(scale-origin.y)) - 1n;
+    let minD = MathHelpers.log2BigInt(scale/(scale-origin.y)) - 1n;
+    if (minD < 0) minD = 0n;
 
     // Exclude nodes which are too small.
     const minNodeHeight = 0.5;
@@ -138,11 +149,33 @@ class Renderer {
     return [minD, maxD];
   }
 
+  // Returns the range of x coordinates of the viewport at the current scale.
   xRange() {
     const viewport = this._viewport;
     const origin = viewport.origin;
 
     return [origin.x, viewport.fromCanvasX(this._canvas.width) + origin.x];
+  }
+
+  // Range of i values visible in xRange at depth d.
+  // Returns the half-open interval [iMin, iMax).
+  // The returned range will always be valid indexes (possible empty).
+  iRange(d, expD, xRange) {
+    const [xMin, xMax] = xRange;
+    const scale = this._viewport.scale;
+
+    let iMin = (xMin<<d)/scale;
+    if (iMin < 0) iMin = 0n;
+
+    let iMax = (xMax<<d)/scale + 1n;
+    if (iMax > expD) iMax = expD;
+
+    if (iMin >= iMax) {
+      iMin = 0;
+      iMax = 0;
+    }
+
+    return [iMin, iMax];
   }
 
   initialLayerWidth() {
@@ -226,13 +259,65 @@ class Tree {
         throw('Unknown tree type: ' + type);
     };
 
+    this._drawTree(selectedNodeId, initState, nextStateFn, valueFn);
+  }
+
+   _drawTree(selectedNodeId, initState, nextStateFn, valueFn) {
     let renderer = this._renderer;
 
-    let selectedBranches = selectedNodeId.toString(2);
-    let stack = [[0n, 0n, 0n, renderer.initialLayerWidth(), ...initState, selectedNodeId > 0]];
     let [minD, maxD] = renderer.depthRange();
-    let [minX, maxX] = renderer.xRange();
+    const expMinD = 1n << minD;
 
+    let [minX, maxX] = renderer.xRange();
+    let [minI, maxI] = renderer.iRange(minD, expMinD, [minX, maxX]);
+
+    // Find all nodes where depth == minD.
+    // The final positions don't depend on the viewport so can be cached.
+    let drawStarts = [];
+    let stack = [[0n, expMinD, ...initState]];
+    while (stack.length) {
+      let [iStart, iWidth, s0, s1] = stack.pop();
+      this._nodesProcessed++;
+
+      if (iWidth == 1n) {
+        drawStarts.push([iStart, s0, s1]);
+      } else {
+        iWidth >>= 1n;
+        const iMid = iStart + iWidth;
+        const s2 = nextStateFn(s0, s1);
+
+        if (iMid >= minI) {
+          stack.push([iStart, iWidth, s0, s2]);
+        }
+        if (iMid < maxI) {
+          stack.push([iMid, iWidth, s2, s1]);
+        }
+      }
+    }
+    this._numDrawStarts = drawStarts.length;
+
+    // Determine if there is a selected node prefix to start matching on.
+    const selectedBranches = selectedNodeId.toString(2);
+    const selectedNodeDepth = selectedBranches.length-1;
+    let truncatedSelectedId = -1n;
+    if (selectedNodeDepth >= minD) {
+      truncatedSelectedId = selectedNodeId >> (BigInt(selectedNodeDepth) - minD);
+      truncatedSelectedId -= expMinD;
+    }
+
+    // Set up the drawing stack.
+    const layerWidth = this._renderer.layerWidth(minD);
+    for (let j = 0; j < drawStarts.length; j++) {
+      const [i, s0, s1] = drawStarts[j];
+
+      // TODO: We can precompute all of these when finding iRange.
+      const xStart = this._renderer.xStart(minD, i);
+      const onSelectedBranch = i == truncatedSelectedId;
+
+      stack.push([minD, i, xStart, layerWidth, s0, s1, onSelectedBranch]);
+    }
+
+    // Draw nodes.
     while (stack.length) {
       let [d, i, xStart, layerWidth, s0, s1, onSelectedBranch] = stack.pop();
       this._nodesProcessed++;
@@ -250,17 +335,15 @@ class Tree {
         }
       }
 
-      if (d >= minD) {
-        const rect = renderer.drawNode(d, xStart, layerWidth, v, selectionType);
-        this._addNodeHitbox(d, i, rect);
-      }
+      const rect = renderer.drawNode(d, xStart, layerWidth, v, selectionType);
+      this._addNodeHitbox(d, i, rect);
 
       i <<= 1n;
       d++;
       layerWidth >>= 1n;
       if (d < maxD) {
         const xMid = xStart+layerWidth;
-        if (xMid > minX) {
+        if (xMid >= minX) {
           stack.push([d, i,    xStart, layerWidth, s0, s2, selectionType === Renderer.SELECT_LEFT]);
         }
         if (xMid < maxX) {
@@ -801,7 +884,7 @@ class Controller {
   _updateDebug() {
     // let coord = this._currentCoord;
     // if (coord) this._debugDiv.textContent = `(${coord.x}, ${coord.y}) ${coord.scale}`;
-    this._debugDiv.textContent = `${this._tree._hitboxes.size}/${this._tree._nodesProcessed}`;
+    this._debugDiv.textContent = `${this._tree._hitboxes.size}/${this._tree._nodesProcessed} ${this._tree._numDrawStarts}`;
   }
 
   _setUpSelection() {
