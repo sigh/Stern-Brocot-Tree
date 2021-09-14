@@ -105,7 +105,7 @@ class Renderer {
       scale: scale,
       origin: {
         x: xMid - screenMidX,
-        y: scale - yMid - screenMidY,
+        y: screenMidY - yMid,
       },
     }
   }
@@ -124,13 +124,12 @@ class Renderer {
     // TODO: Optimize logs.
     //  - factor them out.
     //  - keep track of log scale?
-    //  - change origin.y to not require inverting by scale.
     const viewport = this._viewport;
     const scale = viewport.scale;
     const origin = viewport.origin;
 
     // Exclude nodes which are above the viewport.
-    let minD = MathHelpers.log2BigInt(scale/(scale-origin.y)) - 1n;
+    let minD = MathHelpers.log2BigInt(scale/origin.y) - 1n;
     if (minD < 0) minD = 0n;
 
     // Exclude nodes which are too small.
@@ -140,7 +139,7 @@ class Renderer {
 
     // Exclude nodes which are below the viewport.
     // If targetYCoord  <= 0, then the whole tree is visible.
-    const targetYMin = scale - origin.y - viewport.fromCanvasY(this._canvas.height);
+    const targetYMin = origin.y - viewport.fromCanvasY(this._canvas.height);
     if (targetYMin > 0) {
       const maxViewportD = MathHelpers.log2BigInt(scale/targetYMin) + 1n;
       if (maxViewportD < maxD) maxD = maxViewportD;
@@ -195,7 +194,7 @@ class Renderer {
     const x = xMin + layerHeight;
     const canvasX = viewport.toCanvasX(x - origin.x);
 
-    const canvasYMin = viewport.toCanvasY(scale - yMin - origin.y);
+    const canvasYMin = viewport.toCanvasY(origin.y - yMin);
     const canvasYMid = canvasYMin - nodeHeight*0.5;
 
     // Draw the branches.
@@ -444,8 +443,8 @@ class Viewport {
     this._onUpdate = null;
     this._canvas = canvas;
 
-    this.origin = {x: 0n, y: 0n};
     this.scale = 0n;
+    this.origin = {x: 0n, y: 0n, y1: 0n};
     this.resetPosition();
 
     this._setUpMouseWheel(canvas);
@@ -471,7 +470,7 @@ class Viewport {
       const dx = pixelScale * dcx;
       const dy = pixelScale * dcy;
       origin.x -= BigInt(Math.floor(dx));
-      origin.y -= BigInt(Math.floor(dy));
+      origin.y += BigInt(Math.floor(dy));
       dragPos.x = e.clientX;
       dragPos.y = e.clientY;
       this._update();
@@ -509,38 +508,39 @@ class Viewport {
       // scaling.
       let pixelScale = this._pixelScale();
       origin.x += BigInt(Math.floor(pixelScale * canvasX));
-      origin.y += BigInt(Math.floor(pixelScale * canvasY));
+      origin.y -= BigInt(Math.floor(pixelScale * canvasY));
 
       // Clamp the delta, and ensure that we don't zoom out too far.
       const ds = clamp(e.deltaY * 0.01, -0.5, 0.5);
 
       // Scale by 2**ds. Scale ds by 2**x so that we only deal with integers.
-      const x = 5n;
-      let dsX = BigInt(Math.floor(Math.pow(2, Number(x) + ds)));
-      this.scale = this.scale * dsX >> x;
+      const f = 5n;
+      let dsF = BigInt(Math.floor(Math.pow(2, Number(f) + ds)));
+      this.scale = this.scale * dsF >> f;
       if (this.scale < this.MIN_SCALE) {
-        dsX = dsX * this.MIN_SCALE / this.scale;
+        dsF = dsF * this.MIN_SCALE / this.scale;
         this.scale = this.MIN_SCALE;
       }
-      origin.x = origin.x * dsX >> x;
-      origin.y = origin.y * dsX >> x;
+      origin.x = origin.x * dsF >> f;
+      origin.y = origin.y * dsF >> f;
 
       // Reoffset origin after scaling.
       pixelScale = this._pixelScale();
       origin.x -= BigInt(Math.floor(pixelScale * canvasX));
-      origin.y -= BigInt(Math.floor(pixelScale * canvasY));
+      origin.y += BigInt(Math.floor(pixelScale * canvasY));
 
       this._update();
     };
   }
 
   resetPosition() {
+    this.scale = this.MIN_SCALE;
+
     // Offset origin so the tree is centered.
     const offset =
       -(BigInt(Math.floor(this._pixelScale()*this._canvas.width)) - this.MIN_SCALE) / 2n;
     this.origin.x = offset;
-    this.origin.y = 0n;
-    this.scale = this.MIN_SCALE;
+    this.origin.y = this.MIN_SCALE;
   }
 
   setPosition(origin, scale) {
@@ -576,7 +576,7 @@ class Viewport {
   _clampPosition() {
     // Clamp the y direction so that we can easily zoom in without running
     // off the bottom of the tree.
-    this.origin.y = clamp(this.origin.y, 0n, this.scale - this.MIN_SCALE);
+    this.origin.y = clamp(this.origin.y, this.MIN_SCALE, this.scale);
   }
 
   _update() {
@@ -591,7 +591,7 @@ class Viewport {
     const pixelScale = this._pixelScale();
 
     return {x: this.origin.x + BigInt(Math.floor(pixelScale*canvasX)),
-            y: this.scale - this.origin.y - BigInt(Math.floor(pixelScale*canvasY)),
+            y: this.origin.y - BigInt(Math.floor(pixelScale*canvasY)),
             canvasX: canvasX,
             canvasY: canvasY,
             scale: this.scale,
