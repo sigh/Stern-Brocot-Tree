@@ -1,0 +1,24 @@
+body {
+  font-family: sans-serif;
+  color: #333;
+}
+
+h1 {
+  color: #000;
+}
+
+#main-content {
+  max-width: 800px;
+  width: 90%;
+  margin: 20px;
+}
+
+details {
+  border: 1px solid gray;
+  border-radius: 2px;
+  box-shadow: rgba(0, 0, 0, 0.15) 1.95px 1.95px 2.6px;
+
+  padding: 5px;
+  margin: 5px 0px;
+}
+
