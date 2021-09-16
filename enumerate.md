@@ -3,6 +3,8 @@ layout: default
 title: Enumerating the Rationals with Stern-Brocot Trees
 ---
 
+# A grid of Rationals
+
 The rational numbers ($$ \mathbb{Q} $$) are [countable](https://en.wikipedia.org/wiki/Countable_set),
 meaning that we can match them up, one-to-one, with the natural
 numbers ($$ \mathbb{N} $$).
@@ -186,9 +188,109 @@ This gives us several nice properties:
 > Since $$ m'+n' + m+n $$ increase at every step in the process, it must
 > eventually equal to $$ a + b $$.
 
-Thus the Stern-Brocot Tree is a binary search tree over all the positive rationals!
+Thus the Stern-Brocot Tree is a binary search tree over all the positive=
+rationals!
+
+# Mapping to the Naturals
+
+Each rational in tree can be uniquely identified by the path taken to reach
+it in the tree. We will use:
+
+* $$ L $$ to represent taking a left branch
+* $$ R $$ to represent taking a right branch
+
+For convinience we will also use:
+
+* $$ I $$ to represent the empty path
+* Exponents to represent runs of the same value. i.e.
+  $$ X^n = \underbrace{XX \dots X}_{n} $$
+
+For example
+$$
+  \frac{1}{1} = I \quad
+  \frac{2}{1} = R \quad
+  \frac{2}{5} = LLR = L^2R \quad
+  \frac{22}{7} = RRRLLLLLL = R^3L^6
+$$
+
+This gives a bijection from the positive rationals to the finite strings made up
+of $$ L $$ and $$ R $$: $$ \mathbb{Q}^+ \to \{L,R\}^* $$.
+
+If we use $$ \{0,1\} $$ instead of $$ \{L,R\} $$,
+then we have strings of binary digits.
+Then prepending the strings with a $$ 1 $$ lets us interpret the strings as
+natural numbers in binary. Using the same examples:
+
+$$
+  \frac{1}{1} = I \to \color{grey}1\color{black}_2 = 1 \quad
+  \frac{2}{1} = R \to \color{grey}1\color{black}1_2 = 3 \quad
+  \frac{2}{5} = L^2R \to \color{grey}1\color{black}001_2 = 9 \quad
+  \frac{22}{7} = R^3L^6 \to \color{grey}1\color{black}111000000_2 = 960
+$$
+
+This is a bijection $$ \mathbb{Q}^+ \to \mathbb{N}^+ $$ which is equivalent to
+traversing the Stern-Brocot tree layer by layer, i.e. a breath-first traversal.
+
+TODO: demo
+
+To consisely describe this process, define the matricies:
+
+$$
+  I = \begin{pmatrix} 1 & 0 \\ 0 & 1 \end{pmatrix}
+  \quad
+  L = \begin{pmatrix} 1 & 1 \\ 0 & 1 \end{pmatrix}
+  \quad
+  R = \begin{pmatrix} 1 & 0 \\ 1 & 1 \end{pmatrix}
+$$
+
+Define the function $$ f $$ to turn a matrix into a rational number:
+
+$$
+  f\left(\begin{pmatrix} n & n' \\ m & m'\end{pmatrix}\right) = \frac{m+m'}{n+n'}
+$$
+
+Now the path strings we created above are _equations_ to generate a
+value in the tree!
+
+TODO: Prove
+
+The concrete algorithm is:
+
+```python
+def toNatural(q):
+  s = I
+  n = 1
+
+  while f(s) != q:
+    if f(s) < q:
+      s = s*L
+      n = n*2
+    else:
+      s = s*R
+      n = n*2+1
+
+  return n
+```
+
+```python
+def toRational(n):
+  s = I
+
+  while n > 1:
+    if n%2 == 0:
+      s = s*L
+      n = n/2
+    else:
+      s = s*R
+      n = (n-1)/2
+
+  return f(s)
+```
 
 # Sources
 
 Graham, Ronald L., Knuth, Donald E., & Patashnik, Oren. (1994). _Concrete
 mathematics: A foundation for computer science._ Second edn. Addison-Wesley.
+
+Calkin, Neil; Wilf, Herbert (2000), "Recounting the rationals", _American
+Mathematical Monthly, Mathematical Association of America_
