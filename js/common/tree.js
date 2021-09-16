@@ -1,4 +1,87 @@
-class Tree {
+class TreeController extends BaseEventTarget {
+  constructor(canvas) {
+    super();
+
+    this._update = deferUntilAnimationFrame(this._update.bind(this));
+    this._updateSelection = deferUntilAnimationFrame(this._updateSelection.bind(this));
+
+    this._treeType = 'stern-brocot';
+    this._hoverNodeId = null;
+    this._stickyNodeId = null;
+
+    this._canvas = canvas;
+    this._viewport = new Viewport(canvas);
+    this._viewport.addEventListener('update', () => this._update());
+    this._viewport.addEventListener('click', () => {
+      this._stickyNodeId = this._hoverNodeId;
+      this._update();
+    });
+    this._viewport.addEventListener('mousemove', (coord) => {
+      this._updateSelection(coord);
+    });
+
+    let renderer = new Renderer(canvas, this._viewport);
+    this._tree = new TreeView(renderer);
+  }
+
+  _update() {
+    this._tree.draw(this._treeType, this.selectedNodeId());
+    this.dispatchEvent('update');
+  }
+
+  _updateSelection(coord) {
+    // Check if we are still in the same node.
+    if (this._hoverNodeId) {
+      if (this._tree.isInsideNodeId(coord, this._hoverNodeId)) return;
+    }
+
+    const nodeId = this._tree.findNodeIdAtCoord(coord);
+
+    if (this._hoverNodeId == nodeId) return;
+    this._hoverNodeId = nodeId;
+
+    this._canvas.style.cursor = nodeId ? 'pointer' : 'auto'
+    this._update();
+    this.dispatchEvent('selectionChanged');
+  }
+
+  treeType() {
+    return this._treeType;
+  }
+
+  setTreeType(treeType) {
+    this._treeType = treeType;
+    this._update();
+    if (this.selectedNodeId()) this.dispatchEvent('selectionChanged');
+  }
+
+  selectedNodeId() {
+    return this._stickyNodeId || this._hoverNodeId;
+  }
+
+  resetPosition() {
+    this._viewport.resetPosition();
+    this._update();
+  }
+
+  resizeCanvas(size) {
+    this._canvas.height = size.height;
+    this._canvas.width = size.width;
+    this._update();
+  }
+
+  selectNodeByContinuedFraction(cf) {
+    const node = this._tree.nodeForContinuousFraction(
+      this._treeType, cf);
+    this._stickyNodeId = node.nodeId;
+    if (node.nodeId) {
+      this._viewport.setPosition(node.origin, node.scale);
+    }
+    this._update();
+  }
+}
+
+class TreeView {
   constructor(renderer) {
     this._renderer = renderer;
     this._hitboxes = new Map();
@@ -265,7 +348,6 @@ class Tree {
   }
 }
 
-
 class Renderer {
   constructor(canvas, viewport) {
     this._canvas = canvas;
@@ -484,12 +566,13 @@ class Renderer {
   }
 }
 
-class Viewport {
+class Viewport extends BaseEventTarget {
   SIZE = Math.pow(2, 16);
   MIN_SCALE = BigInt(Math.floor(this.SIZE * 0.95));
 
   constructor(canvas) {
-    this._onUpdate = null;
+    super();
+
     this._canvas = canvas;
 
     this.scale = 0n;
@@ -498,12 +581,25 @@ class Viewport {
 
     this._setUpMouseWheel(canvas);
     this._setUpMouseDrag(canvas);
+    this._setUpMouseMove(canvas);
+    this._setUpMouseClick(canvas);
 
     this._dragDistance = 0;
   }
 
-  setUpdateCallback(onUpdate) {
-    this._onUpdate = onUpdate;
+  _setUpMouseClick(canvas) {
+    canvas.onclick = (e) => {
+      if (this._dragDistance <= 1) {
+        this.dispatchEvent('click');
+      }
+    };
+  }
+
+  _setUpMouseMove(canvas) {
+    canvas.onmousemove = (e) => {
+      const coord = this._clientXYToCoord(e.clientX, e.clientY);
+      this.dispatchEvent('mousemove', coord);
+    };
   }
 
   _setUpMouseDrag(canvas) {
@@ -537,10 +633,6 @@ class Viewport {
       };
       document.addEventListener('mouseup', mouseUpHandler);
     };
-  }
-
-  wasDragged() {
-    return this._dragDistance > 1;
   }
 
   _rescale(ds, canvasX, canvasY) {
@@ -634,10 +726,10 @@ class Viewport {
 
   _update() {
     this._clampPosition();
-    this._onUpdate();
+    this.dispatchEvent('update');
   }
 
-  clientXYToCoord(clientX, clientY) {
+  _clientXYToCoord(clientX, clientY) {
     const canvasOrigin = this._canvasOrigin();
     const canvasX = clientX - canvasOrigin.x;
     const canvasY = clientY - canvasOrigin.y;

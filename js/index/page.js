@@ -1,76 +1,11 @@
-class ControlPanel {
-  constructor() {
-    this._onUpdate = null;
-    this._treeSelect = document.getElementById('tree-type');
-    this._treeSelect.onchange = () => this._update();
-    this._targetContinuedFraction = null;
-
-    this._setUpFinder();
-  }
-
-  setUpdateCallback(onUpdate) {
-    this._onUpdate = onUpdate;
-  }
-
-  _setUpFinder() {
-    let reset = document.getElementById('reset-zoom');
-    reset.onclick = () => {
-      // Just reset the zoom by setting the target to 0.
-      this._targetContinuedFraction = [];
-      this._update();
-      return false;
-    };
-
-    let findExp = document.getElementById('find-expression');
-    let form = document.getElementById('find-form');
-    form.onsubmit = (e) => {
-      e.preventDefault();
-
-      const value = Function('"use strict";return (' + findExp.value + ')')();
-
-      let cf = null;
-
-      if (typeof value == 'number') {
-        // Determine the exact value of the floating point value.
-        const floatParts = MathHelpers.getFloatParts(value);
-        cf = floatParts.exponent >= 0
-          ? floatParts.int << floatParts.exponent
-          : MathHelpers.findContinuedFractionBigInt(
-              floatParts.int, 1n << -floatParts.exponent);
-      } else if (Array.isArray(value)) {
-        // Interpret array as continued fraction cooeficients.
-        cf = value.map(BigInt);
-      }
-
-      this._targetContinuedFraction = cf;
-
-      this._update();
-
-      return false;
-    };
-  }
-
-  popTargetContinuedFraction() {
-    let f = this._targetContinuedFraction;
-    this._targetContinuedFraction = null;
-    return f;
-  }
-
-  treeType() {
-    return this._treeSelect.value;
-  }
-
-  _update() {
-    if (this._onUpdate) this._onUpdate();
-  }
-}
-
 class NodeInfoView {
-  constructor() {
+  constructor(tree) {
     this._container = document.getElementById('node-info');
 
-    this._currentNode = null;
-    this._currentTreeType = null;
+    tree.addEventListener('selectionChanged', () => {
+      this._showNode(tree.treeType(),
+                          tree.selectedNodeId())
+    });
   }
 
   _runLengthEncode(nodeIdStr) {
@@ -189,7 +124,16 @@ class NodeInfoView {
     container.appendChild(div);
   }
 
+  _clearContainer() {
+    while (this._container.firstChild) {
+      this._container.removeChild(this._container.firstChild);
+    }
+  }
+
   _showNode(treeType, nodeId) {
+    this._clearContainer();
+    if (!nodeId) return;
+
     const nodeIdStr = nodeId.toString(2);
     const rle = this._runLengthEncode(nodeIdStr);
     const cf = this._toContinuedFraction(rle, treeType);
@@ -212,137 +156,78 @@ class NodeInfoView {
 
     MathJax.typeset([container]);
   }
-
-  showNode(treeType, nodeId) {
-    if (nodeId == this._currentNode && this._currentTreeType == treeType) {
-      return;
-    }
-    this._currentNode = nodeId;
-    this._currentTreeType = treeType;
-
-    // Clear the container.
-    while (this._container.firstChild) {
-      this._container.removeChild(this._container.firstChild);
-    }
-
-    if (!nodeId) return;
-
-    this._showNode(treeType, nodeId);
-  }
 }
 
-class Controller {
-  constructor(canvas, controlPanel, nodeInfoView) {
-    this.update = deferUntilAnimationFrame(this.update.bind(this));
+const setUpDebug = (tree) => {
+  let debugDiv = document.getElementById('debug-info');
+  let treeView = tree._tree;
 
-    this._canvas = canvas;
-    this._viewport = new Viewport(canvas);
-    this._viewport.setUpdateCallback(() => this.update());
+  tree.addEventListener( 'update', () => {
+    debugDiv.textContent = `
+      ${treeView._hitboxes.size}/${treeView._nodesProcessed}
+      ${treeView._numDrawStarts}
+    `;
+  });
+};
 
-    let renderer = new Renderer(canvas, this._viewport);
-    this._tree = new Tree(renderer);
+const setUpControlPanel = (tree) => {
+  // Set up tree type selector.
+  let treeSelect = document.getElementById('tree-type');
+  treeSelect.onchange = () => {
+    tree.setTreeType(treeSelect.value);
+  };
+  treeSelect.onchange();
 
-    this._debugDiv = document.getElementById('debug-info');
-    this._controlPanel = controlPanel;
-    this._controlPanel.setUpdateCallback(() => {
-      this._treeType = this._controlPanel.treeType();
-      this.update();
-    });
-    this._nodeInfoView = nodeInfoView;
+  // Set up reset button.
+  let reset = document.getElementById('reset-zoom');
+  reset.onclick = () => {
+    tree.resetPosition();
+    return false;
+  };
 
-    this._treeType = this._controlPanel.treeType();
-    this._hoverNodeId = null;
-    this._selectedNodeId = null;
-    this._currentCoord = null;
+  let findExp = document.getElementById('find-expression');
+  let form = document.getElementById('find-form');
+  form.onsubmit = (e) => {
+    e.preventDefault();
 
-    this._setUpSelection();
+    const value = Function('"use strict";return (' + findExp.value + ')')();
 
-    const resizeCanvas = () => {
-      this._canvas.height = document.body.clientHeight;
-      this._canvas.width = document.body.clientWidth;
-      this.update();
-    };
-    window.onresize = resizeCanvas;
-    resizeCanvas();
-    this._viewport.resetPosition();
-  }
+    let cf = null;
 
-  update() {
-    const targetContinuedFraction = this._controlPanel.popTargetContinuedFraction();
-    if (targetContinuedFraction !== null) {
-      if (targetContinuedFraction.length > 0) {
-        const node = this._tree.nodeForContinuousFraction(
-          this._treeType, targetContinuedFraction);
-        this._selectedNodeId = node.nodeId;
-        if (node.nodeId) {
-          this._viewport.setPosition(node.origin, node.scale);
-        }
-      } else {
-        // Reset the zoom.
-        this._viewport.resetPosition();
-      }
+    if (typeof value == 'number') {
+      // Determine the exact value of the floating point value.
+      const floatParts = MathHelpers.getFloatParts(value);
+      cf = floatParts.exponent >= 0
+        ? floatParts.int << floatParts.exponent
+        : MathHelpers.findContinuedFractionBigInt(
+            floatParts.int, 1n << -floatParts.exponent);
+    } else if (Array.isArray(value)) {
+      // Interpret array as continued fraction cooeficients.
+      cf = value.map(BigInt);
     }
 
-    const highlighedNodeId = this._selectedNodeId || this._hoverNodeId;
-    this._tree.draw(this._treeType, highlighedNodeId);
-    this._nodeInfoView.showNode(this._treeType, highlighedNodeId);
-    this._updateDebug();
-  }
+    tree.selectNodeByContinuedFraction(cf);
 
-  _updateDebug() {
-    // let coord = this._currentCoord;
-    // if (coord) this._debugDiv.textContent = `(${coord.x}, ${coord.y}) ${coord.scale}`;
-    this._debugDiv.textContent = `${this._tree._hitboxes.size}/${this._tree._nodesProcessed} ${this._tree._numDrawStarts}`;
-  }
-
-  _setUpSelection() {
-    const updateDebug = deferUntilAnimationFrame(() => {
-      this._updateDebug();
-    });
-
-    const updateSelection = deferUntilAnimationFrame((coord) => {
-      // Check if we are still in the same node.
-      if (this._hoverNodeId) {
-        if (this._tree.isInsideNodeId(coord, this._hoverNodeId)) return;
-      }
-
-      const nodeId = this._tree.findNodeIdAtCoord(coord);
-
-      if (this._hoverNodeId == nodeId) return;
-      this._hoverNodeId = nodeId;
-
-      if (nodeId) {
-        this._canvas.style = 'cursor: pointer';
-      } else {
-        this._canvas.style = 'cursor: auto';
-      }
-      this.update();
-    });
-
-    this._canvas.onmousemove = (e) => {
-      const coord = this._viewport.clientXYToCoord(e.clientX, e.clientY);
-      this._currentCoord = coord;
-
-      updateSelection(coord);
-      updateDebug();
-    };
-
-    this._canvas.onclick = (e) => {
-      if (!this._viewport.wasDragged()) {
-        this._selectedNodeId = this._hoverNodeId;
-        this.update();
-      }
-    };
-  }
-}
+    return false;
+  };
+};
 
 const initPage = () => {
   let canvas = document.getElementById('tree-vis');
 
-  let nodeInfoView = new NodeInfoView();
-  let controlPanel = new ControlPanel();
+  let tree = new TreeController(canvas);
 
-  let controller = new Controller(canvas, controlPanel, nodeInfoView);
+  let nodeInfoView = new NodeInfoView(tree);
 
-  controller.update();
-};
+  setUpControlPanel(tree);
+  setUpDebug(tree);
+
+  window.onresize = () => {
+    tree.resizeCanvas({
+      width: document.body.clientWidth,
+      height: document.body.clientHeight,
+    });
+  };
+  window.onresize();
+  tree.resetPosition();
+}
