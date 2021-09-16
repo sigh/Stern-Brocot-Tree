@@ -14,6 +14,7 @@ class TreeController extends BaseEventTarget {
     this._viewport.addEventListener('update', () => this._update());
     this._viewport.addEventListener('click', () => {
       this._stickyNodeId = this._hoverNodeId;
+      this.dispatchEvent('selectionChange');
       this._update();
     });
     this._viewport.addEventListener('mousemove', (coord) => {
@@ -44,7 +45,7 @@ class TreeController extends BaseEventTarget {
 
     this._canvas.style.cursor = nodeId ? 'pointer' : 'auto'
     this._update();
-    this.dispatchEvent('selectionChanged');
+    this.dispatchEvent('selectionChange');
   }
 
   treeType() {
@@ -54,7 +55,7 @@ class TreeController extends BaseEventTarget {
   setTreeType(treeType) {
     this._treeType = treeType;
     this._update();
-    if (this.selectedNodeId()) this.dispatchEvent('selectionChanged');
+    if (this.selectedNodeId()) this.dispatchEvent('selectionChange');
   }
 
   selectedNodeId() {
@@ -80,6 +81,7 @@ class TreeController extends BaseEventTarget {
       this._viewport.setPosition(node.origin, node.scale);
     }
     this._update();
+    this.dispatchEvent('selectionChange');
   }
 }
 
@@ -99,11 +101,13 @@ class TreeView {
         initState: [[0n,1n], [1n,0n]],
         nextStateFn: (s0, s1) => [s0[0] + s1[0], s0[1] + s1[1]],
         valueFn: (s0, s1, s2) => s2,
+        seedNodes: [[0n,1n], [1n,0n]],
       },
       'calkin-wilf': {
         initState: [1n, 1n],
         nextStateFn: (s0, s1) => s0 + s1,
         valueFn: (s0, s1, s2) => [s0, s1],
+        seedNodes: null,
       }
     };
   }
@@ -227,6 +231,12 @@ class TreeView {
       const onSelectedBranch = i == truncatedSelectedId;
 
       stack.push([minD, i, xStart, layerWidth, s0, s1, onSelectedBranch]);
+    }
+
+    // Draw seed nodes.
+    if (config.seedNodes && minD == 0) {
+      renderer.drawSeedNode(0, layerWidth, config.seedNodes[0]);
+      renderer.drawSeedNode(1, layerWidth, config.seedNodes[1]);
     }
 
     // Draw nodes.
@@ -375,8 +385,16 @@ class Renderer {
     ctx.stroke();
   }
 
-  _drawFraction(r, canvasX, canvasY, nodeHeight) {
+  _drawFraction(r, canvasX, canvasY, nodeHeight, color) {
     if (nodeHeight < 2) return [0, 0, 0, 0];
+
+    let ctx = this._ctx;
+
+    if (color) {
+      ctx.save();
+      ctx.fillStyle = color;
+      ctx.strokeStyle = color;
+    }
 
     const n = r[0].toString();
     const d = r[1].toString();
@@ -385,8 +403,6 @@ class Renderer {
     const length = Math.max(n.length, d.length);
     const textScale = 0.4 * Math.min(6/length, 1);
     const fontSize = nodeHeight * textScale;
-
-    let ctx = this._ctx;
 
     ctx.font = fontSize + 'px Serif';
     const width = ctx.measureText(n.length > d.length ? n : d).width;
@@ -401,6 +417,10 @@ class Renderer {
     // it to be noticable.
     if (fontSize > 2) {
       this._drawBar(ctx, canvasX, canvasY, width, fontSize/20);
+    }
+
+    if (color) {
+      ctx.restore();
     }
 
     return rect;
@@ -469,6 +489,7 @@ class Renderer {
 
   static _PATH_COLOR = '#0000aa';
   static _SELECTED_COLOR = '#0099ff';
+  static _SEED_COLOR = 'grey'
 
   // The range of depths visible in the current viewport.
   // Returns the half-open interval [minD, maxD).
@@ -554,24 +575,60 @@ class Renderer {
     this._drawBranches(ctx, canvasX, canvasYMid, nodeHeight, selectionType);
 
     // Draw the fraction.
+    let color = null;
     if (selectionType) {
-      ctx.save();
-      const color = selectionType === Renderer.SELECT_FINAL
+      color = selectionType === Renderer.SELECT_FINAL
         ? Renderer._SELECTED_COLOR : Renderer._PATH_COLOR;
-      ctx.fillStyle = color;
-      ctx.strokeStyle = color;
     }
-    let rect = this._drawFraction(frac, canvasX, canvasYMid, nodeHeight);
-    if (selectionType) ctx.restore();
+    const rect = this._drawFraction(frac, canvasX, canvasYMid, nodeHeight, color);
 
     return rect;
+  }
+
+  drawSeedNode(xOffsetRatio, layerWidth, v) {
+    const viewport = this._viewport;
+    const scale = viewport.scale;
+    const origin = viewport.origin;
+
+    const layerHeight = layerWidth >> 1n;
+
+    const yMin = layerHeight;
+    const nodeHeight = viewport.toCanvasY(layerHeight);
+
+    const x = layerWidth * BigInt(Math.floor(xOffsetRatio*(1<<5))) >> 5n;
+    const canvasX = viewport.toCanvasX(x - origin.x);
+
+    const xMid = layerHeight;
+    const canvasXMid = viewport.toCanvasX(xMid - origin.x);
+
+    const canvasYMin = viewport.toCanvasY(origin.y - yMin);
+    const canvasYMid = canvasYMin - nodeHeight*0.5;
+    const canvasYSeed = canvasYMin - nodeHeight*0.6;
+
+    let ctx = this._ctx;
+
+    // Draw the branch.
+    ctx.save();
+    ctx.strokeStyle = Renderer._SEED_COLOR;
+    ctx.setLineDash([nodeHeight/50]);
+
+    ctx.lineWidth = nodeHeight/100;
+    ctx.beginPath();
+    ctx.moveTo(canvasXMid, canvasYMid);
+    ctx.lineTo(canvasX, canvasYSeed);
+    ctx.stroke();
+
+    ctx.restore();
+
+    // Draw the seed.
+    this._drawFraction(v, canvasX, canvasYSeed, nodeHeight, Renderer._SEED_COLOR);
   }
 }
 
 class Viewport extends BaseEventTarget {
   SIZE = Math.pow(2, 16);
-  MIN_SCALE = BigInt(Math.floor(this.SIZE * 0.8));
-  INITIAL_SCALE = BigInt(Math.floor(this.SIZE * 0.95));
+  MIN_SCALE = BigInt(Math.floor(this.SIZE * 0.9));
+  INITIAL_SCALE = BigInt(Math.floor(this.SIZE * 0.97));
 
   constructor(canvas) {
     super();

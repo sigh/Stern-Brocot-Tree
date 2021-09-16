@@ -2,7 +2,7 @@ class NodeInfoView {
   constructor(tree) {
     this._container = document.getElementById('node-info');
 
-    tree.addEventListener('selectionChanged', () => {
+    tree.addEventListener('selectionChange', () => {
       this._showNode(tree.treeType(),
                           tree.selectedNodeId())
     });

@@ -7,7 +7,7 @@ The rational numbers ($$ \mathbb{Q} $$) are [countable](https://en.wikipedia.org
 meaning that we can match them up, one-to-one, with the natural
 numbers ($$ \mathbb{N} $$).
 
-A common demonstration is to create a grid of the positive rational
+A common way to show this is to create a grid of the positive rational
 numbers ($$ \mathbb{Q}^+ $$), with the rows having every numerator
 and the columns having every denominator.
 Then we can iterate over the grid such that we eventually reach each number.
@@ -93,7 +93,7 @@ $$ \frac{m+m'}{n+n'} $$ where $$ \frac{m}{n} $$ is it's nearest ancestor to
 the left, and $$ \frac{m'}{n'} $$ is it's nearest ancestor to the right.
 
 <div>
-  <canvas id='stern-brocot-demo' width="400" height="400">
+  <canvas id='stern-brocot-demo' width="500" height="400">
     Your browser does not support canvas.
   </canvas>
 </div>
@@ -186,8 +186,7 @@ This gives us several nice properties:
 > Since $$ m'+n' + m+n $$ increase at every step in the process, it must
 > eventually equal to $$ a + b $$.
 
-This means that the Stern-Brocot Tree is a binary search tree over all the
-positive rationals!
+Thus the Stern-Brocot Tree is a binary search tree over all the positive rationals!
 
 # Sources
 
