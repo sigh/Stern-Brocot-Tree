@@ -4,7 +4,7 @@ class NodeInfoView {
 
     tree.addEventListener('selectionChange', () => {
       this._showNode(tree.treeType(),
-                          tree.selectedNodeId())
+                     tree.selectedNodeId())
     });
   }
 

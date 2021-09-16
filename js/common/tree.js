@@ -1,3 +1,51 @@
+class SternBrocotTree {
+  static initState = [[0n,1n], [1n,0n]];
+  static seedValues = [[0n,1n], [1n,0n]];
+
+  // Return [value, left child, right child]
+  static node(s) {
+    const v = [s[0][0] + s[1][0], s[0][1] + s[1][1]];
+    return [v, [s[0], v], [v, s[1]]];
+  }
+
+  // Adjacent states on the same layer.
+  // From https://www.researchgate.net/publication/221440223_Recounting_the_Rationals_Twice
+
+  static nextState(s) {
+    const j = (s[0][1]+s[0][0]-1)/(s[1][1]+s[1][0])
+    const k = (j<<1)+1
+    return [s[1], [s[1][0]*k-s[0][0], s[1][1]*k-s[0][1]]];
+  };
+  static prevState(s) {
+    const j = (s[1][1]+s[1][0]-1)/(s[0][1]+s[0][0])
+    const k = (j<<1)+1
+    return [[s[0][0]*k-s[1][0], s[0][1]*k-s[1][1]], s[0]];
+  };
+}
+
+class CalkinWilfTree {
+  static initState = [1n, 1n];
+  static seedValues = null;
+
+  // Return [value, left child, right child]
+  static node(s) {
+    const m = s[0] + s[1];
+    return [s, [s[0], m], [m, s[1]]]
+  }
+
+  // Adjacent states on the same layer.
+  static nextState(s) {
+    const j = s[0]/s[1]
+    const k = (j<<1)+1
+    return [s[1], k*s[1]-s[0]]
+  }
+  static prevState(s) {
+    const j = s[1]/s[0]
+    const k = (j<<1)+1
+    return [k*s[0]-s[1], s[0]]
+  }
+}
+
 class TreeController extends BaseEventTarget {
   constructor(canvas) {
     super();
@@ -97,18 +145,8 @@ class TreeView {
     };
 
     this._treeConfigs = {
-      'stern-brocot': {
-        initState: [[0n,1n], [1n,0n]],
-        nextStateFn: (s0, s1) => [s0[0] + s1[0], s0[1] + s1[1]],
-        valueFn: (s0, s1, s2) => s2,
-        seedNodes: [[0n,1n], [1n,0n]],
-      },
-      'calkin-wilf': {
-        initState: [1n, 1n],
-        nextStateFn: (s0, s1) => s0 + s1,
-        valueFn: (s0, s1, s2) => [s0, s1],
-        seedNodes: null,
-      }
+      'stern-brocot': SternBrocotTree,
+      'calkin-wilf': CalkinWilfTree,
     };
   }
 
@@ -155,9 +193,9 @@ class TreeView {
       if (targetMinI >= cache.minI && targetMaxI <= cache.maxI) {
         const iWidth = 1n << diffD;
         for (let j = 0; j < cache.initialNodes.length; j++) {
-          const [iStart, s0, s1] = cache.initialNodes[j];
+          const [iStart, s] = cache.initialNodes[j];
           if (iStart >= targetMinI && iStart < targetMaxI) {
-            stack.push([iStart << diffD, iWidth, s0, s1]);
+            stack.push([iStart << diffD, iWidth, s]);
           }
         }
       }
@@ -165,27 +203,26 @@ class TreeView {
 
     // We didn't populate from the cache, so we have to start from the start.
     if (!stack.length) {
-      stack.push([0n, expMinD, ...config.initState]);
+      stack.push([0n, expMinD, config.initState]);
     }
 
-    const nextStateFn = config.nextStateFn;
     let initialNodes = [];
     while (stack.length) {
-      let [iStart, iWidth, s0, s1] = stack.pop();
+      let [iStart, iWidth, s] = stack.pop();
       this._nodesProcessed++;
 
       if (iWidth == 1n) {
-        initialNodes.push([iStart, s0, s1]);
+        initialNodes.push([iStart, s]);
       } else {
         iWidth >>= 1n;
         const iMid = iStart + iWidth;
-        const s2 = nextStateFn(s0, s1);
+        const [_, sL, sR] = config.node(s);
 
         if (iMid >= minI) {
-          stack.push([iStart, iWidth, s0, s2]);
+          stack.push([iStart, iWidth, sL]);
         }
         if (iMid < maxI) {
-          stack.push([iMid, iWidth, s2, s1]);
+          stack.push([iMid, iWidth, sR]);
         }
       }
     }
@@ -234,20 +271,17 @@ class TreeView {
     }
 
     // Draw seed nodes.
-    if (config.seedNodes && minD == 0) {
-      renderer.drawSeedNode(0, layerWidth, config.seedNodes[0]);
-      renderer.drawSeedNode(1, layerWidth, config.seedNodes[1]);
+    if (config.seedValues && minD == 0) {
+      renderer.drawSeedNode(0, layerWidth, config.seedValues[0]);
+      renderer.drawSeedNode(1, layerWidth, config.seedValues[1]);
     }
 
     // Draw nodes.
-    const valueFn = config.valueFn;
-    const nextStateFn = config.nextStateFn;
     while (stack.length) {
-      let [d, i, xStart, layerWidth, s0, s1, onSelectedBranch] = stack.pop();
+      let [d, i, xStart, layerWidth, s, onSelectedBranch] = stack.pop();
       this._nodesProcessed++;
 
-      const s2 = nextStateFn(s0, s1);
-      const v = valueFn(s0, s1, s2);
+      const [v, sL, sR] = config.node(s);
 
       let selectionType = Renderer.SELECT_NONE;
       if (onSelectedBranch) {
@@ -268,10 +302,10 @@ class TreeView {
       if (d < maxD) {
         const xMid = xStart+layerWidth;
         if (xMid >= minX) {
-          stack.push([d, i,    xStart, layerWidth, s0, s2, selectionType === Renderer.SELECT_LEFT]);
+          stack.push([d, i,    xStart, layerWidth, sL, selectionType === Renderer.SELECT_LEFT]);
         }
         if (xMid < maxX) {
-          stack.push([d, i+1n, xMid,   layerWidth, s2, s1, selectionType === Renderer.SELECT_RIGHT]);
+          stack.push([d, i+1n, xMid,   layerWidth, sR, selectionType === Renderer.SELECT_RIGHT]);
         }
       }
     }
