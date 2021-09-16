@@ -22,6 +22,8 @@ class TreeController extends BaseEventTarget {
 
     let renderer = new Renderer(canvas, this._viewport);
     this._tree = new TreeView(renderer);
+
+    this._update();
   }
 
   _update() {
@@ -568,7 +570,8 @@ class Renderer {
 
 class Viewport extends BaseEventTarget {
   SIZE = Math.pow(2, 16);
-  MIN_SCALE = BigInt(Math.floor(this.SIZE * 0.95));
+  MIN_SCALE = BigInt(Math.floor(this.SIZE * 0.8));
+  INITIAL_SCALE = BigInt(Math.floor(this.SIZE * 0.95));
 
   constructor(canvas) {
     super();
@@ -679,13 +682,13 @@ class Viewport extends BaseEventTarget {
   }
 
   resetPosition() {
-    this.scale = this.MIN_SCALE;
+    this.scale = this.INITIAL_SCALE;
 
     // Offset origin so the tree is centered.
     const offset =
-      -(BigInt(Math.floor(this._pixelScale()*this._canvas.width)) - this.MIN_SCALE) / 2n;
+      -(BigInt(Math.floor(this._pixelScale()*this._canvas.width)) - this.scale) / 2n;
     this.origin.x = offset;
-    this.origin.y = this.MIN_SCALE;
+    this.origin.y = this.scale;
   }
 
   setPosition(origin, scale) {
@@ -721,7 +724,7 @@ class Viewport extends BaseEventTarget {
   _clampPosition() {
     // Clamp the y direction so that we can easily zoom in without running
     // off the bottom of the tree.
-    this.origin.y = clamp(this.origin.y, this.MIN_SCALE, this.scale);
+    this.origin.y = clamp(this.origin.y, this.MIN_SCALE, this.scale + this.MIN_SCALE);
   }
 
   _update() {

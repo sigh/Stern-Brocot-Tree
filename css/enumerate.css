@@ -22,3 +22,8 @@ details {
   margin: 5px 0px;
 }
 
+canvas {
+  box-shadow: 3px 3px 10px;
+  margin: auto;
+  display: block;
+}

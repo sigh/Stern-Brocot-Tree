@@ -23,4 +23,7 @@ const convertBlockquotes = () => {
 
 const initPage = () => {
   convertBlockquotes();
+
+  let canvas = document.getElementById('stern-brocot-demo');
+  new TreeController(canvas);
 };

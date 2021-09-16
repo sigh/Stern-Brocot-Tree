@@ -92,7 +92,11 @@ This sequence can be arranged into a binary tree with fractions
 $$ \frac{m+m'}{n+n'} $$ where $$ \frac{m}{n} $$ is it's nearest ancestor to
 the left, and $$ \frac{m'}{n'} $$ is it's nearest ancestor to the right.
 
-TODO: Insert demo
+<div>
+  <canvas id='stern-brocot-demo' width="400" height="400">
+    Your browser does not support canvas.
+  </canvas>
+</div>
 
 This gives us several nice properties:
 
