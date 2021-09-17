@@ -33,7 +33,7 @@ canvas {
   gap: 20px;
 }
 
-summary p {
+summary p:first-of-type {
   display: inline-block;
   margin: 0;
 }

@@ -317,32 +317,38 @@ repeatedly fall back to the natural number representation.
 
 # Optimizing with Euclid
 
-For any node in the tree $$ f(S) $$ we have:
+<details>
+  <summary>
+  We can derive the following simple relationship in the path representation:
 
-$$
-\begin{eqnarray}
+  $$
+  \begin{eqnarray}
+    \frac{a}{b} = f(RS) &\iff& \frac{a-b}{b} = f(S) \\
+    \frac{a}{b} = f(LS) &\iff& \frac{a}{b-a} = f(S)
+  \end{eqnarray}
+  $$
+  </summary>
 
-  f(S)  &=& f\left(\begin{pmatrix} n & n' \\ m & m'\end{pmatrix}\right)
-        &=& \frac{m+m'}{n+n'} \\
+  For any node in the tree $$ f(S) $$ we have:
 
-  f(RS) &=& f\left(\begin{pmatrix} n & n' \\ m+n & m'+n'\end{pmatrix}\right)
-        = \frac{(m+n)+(m'+n')}{n+n'} &=& \frac{(m+m')+(n'+n')}{n+n'} \\
+  $$
+  \begin{eqnarray}
 
-  f(LS) &=& f\left(\begin{pmatrix} m+n & m'+n' \\ m & m'\end{pmatrix}\right)
-        = \frac{m+m'}{(m+n)+(m'+n')} &=& \frac{m+m'}{(m+m')+(n+n')}
+    f(S)  &=& f\left(\begin{pmatrix} n & n' \\ m & m'\end{pmatrix}\right)
+          &=& \frac{m+m'}{n+n'} \\
 
-\end{eqnarray}
-$$
+    f(RS) &=& f\left(\begin{pmatrix} n & n' \\ m+n & m'+n'\end{pmatrix}\right)
+          = \frac{(m+n)+(m'+n')}{n+n'} &=& \frac{(m+m')+(n'+n')}{n+n'} \\
 
-This a simple relationship between a node and it's children without having to
-deal with the full matrix:
+    f(LS) &=& f\left(\begin{pmatrix} m+n & m'+n' \\ m & m'\end{pmatrix}\right)
+          = \frac{m+m'}{(m+n)+(m'+n')} &=& \frac{m+m'}{(m+m')+(n+n')}
 
-$$
-\begin{eqnarray}
-  \frac{a}{b} = f(RS) &\iff& \frac{a-b}{n} = f(S) \\
-  \frac{a}{b} = f(LS) &\iff& \frac{a}{b-a} = f(S)
-\end{eqnarray}
-$$
+  \end{eqnarray}
+  $$
+
+  Setting $$ a = m+m' $$ and $$ b = n+n' $$ proves the result.
+
+</details>
 
 Providing us with a simpler `toNatural` algorithm:
 
@@ -399,8 +405,8 @@ representation of the rational!
 
 # Iterating
 
-To iterate, we will construct a successor function $$ s(S) $$ which can operate
-on the matrix representation. The index of $$ s(S) $$ in the natural number
+To iterate, we will construct a successor function $$ s'(S) $$ which can operate
+on the matrix representation. The index of $$ s'(S) $$ in the natural number
 representation should be one added to that of $$ S $$.
 
 To do this we need to:
@@ -448,16 +454,16 @@ In the path string this means finding the trailing $$ R $$s and
 preceding $$ L $$, and transposing them:
 
 $$
-  s(S)
-  = s(TLR^j)
+  s'(S)
+  = s'(TLR^j)
   = TRL^j
 $$ where $$ T $$ is an arbitrary prefix.
 
 Next we can use the inverse matrices to replace the suffix of $$ S $$ to
-obtain a equation for $$ s $$:
+obtain a equation for $$ s' $$:
 
 $$
-  s(S)
+  s'(S)
   = T(LR^jR^{-j}L^{-1})RL^j
   = SR^{-j}L^{-1}RL^j
   = S \begin{pmatrix} 2j+1 & 1 \\ -1 & 0 \end{pmatrix}
@@ -510,7 +516,7 @@ Putting it all together we have:
 
 $$
 
-s(S) = s\left(\begin{pmatrix} n & n' \\ m & m' \end{pmatrix}\right)
+s'(S) = s'\left(\begin{pmatrix} n & n' \\ m & m' \end{pmatrix}\right)
 =
 \begin{cases}
   \begin{pmatrix} 1 & m+2 \\ 0 & 1 \end{pmatrix}    & n' = 0   \\
@@ -543,125 +549,140 @@ This is the [Calkin-Wilf tree](https://en.wikipedia.org/wiki/Calkin%E2%80%93Wilf
 The most obvious difference is that the numbers are no longer in order.
 This is an unfortunate loss, but let's see what we get in return.
 
-First, how to we traverse the tree? To reverse the list, we will pre-multiply
-instead of post-multiply:
+<details>
+  <summary>
+  How to we traverse the tree?
+  The children of $$ \frac{a}{b} $$
+  are simply $$ \frac{a}{a+b} $$ and $$ \frac{a+b}{b} $$.
+  </summary>
 
-$$
-  f(S)
-  = f\left(
-      \begin{pmatrix} n & n' \\ m & m' \end{pmatrix}
-    \right)
-  = \frac{m+m'}{n'+n}
-  = \frac{a}{b}
-$$
+  To reverse the list, we will pre-multiply instead of post-multiply:
 
-$$
-  f(L^jS)
-  = f\left(
-      \begin{pmatrix} 1 & j \\ 0 & 1 \end{pmatrix}
-      \begin{pmatrix} n & n' \\ m & m' \end{pmatrix}
-    \right)
-  = \frac{m+m'}{n+jm+n'+jm'}
-  = \frac{a}{ja+b}
-$$
+  $$
+    f(S)
+    = f\left(
+        \begin{pmatrix} n & n' \\ m & m' \end{pmatrix}
+      \right)
+    = \frac{m+m'}{n'+n}
+    = \frac{a}{b}
+  $$
 
-$$
-  f(R^jS)
-  = f\left(
-      \begin{pmatrix} 1 & 0 \\ j & 1 \end{pmatrix}
-      \begin{pmatrix} n & n' \\ m & m' \end{pmatrix}
-    \right)
-  = \frac{jn+m+jn'+m'}{n+n'}
-  = \frac{a+jb}{b}
-$$
+  $$
+    f(L^jS)
+    = f\left(
+        \begin{pmatrix} 1 & j \\ 0 & 1 \end{pmatrix}
+        \begin{pmatrix} n & n' \\ m & m' \end{pmatrix}
+      \right)
+    = \frac{m+m'}{n+jm+n'+jm'}
+    = \frac{a}{ja+b}
+  $$
 
-Thus we get the remarkably simple result that the children of $$ \frac{a}{b} $$
-are $$ \frac{a}{a+b} $$ and $$ \frac{a+b}{b} $$.
+  $$
+    f(R^jS)
+    = f\left(
+        \begin{pmatrix} 1 & 0 \\ j & 1 \end{pmatrix}
+        \begin{pmatrix} n & n' \\ m & m' \end{pmatrix}
+      \right)
+    = \frac{jn+m+jn'+m'}{n+n'}
+    = \frac{a+jb}{b}
+  $$
 
-Now let's define the successor function as $$ s'(q) = s'(\frac{a}{b}) = s'(f(S)) $$.
+</details>
 
-Once again, we will calculate $$ s' $$ in two parts:
+Now let's define the successor function as
+$$ s(q) = s(\frac{a}{b}) = s(f(S)) $$.
+We will calculate $$ s $$ in two parts:
 
-1. Detect when we are at the end of the layer, and move to the next one.
-2. Find the successor for a node in the same layer.
+<details>
+  <summary>
+  1\. Detect when we are at the end of the layer, and move to the next one.
 
-(1) is simple. The outer nodes $$ L^j $$ and $$ R^j $$ are the same as in the
-Stern-Brocot tree, because the reversed path is the same. Hence it is sufficient
-to detect when $$ \frac{a}{b} $$ is an integer:
-$$ s'(q) = s'(\frac{a}{1}) = \frac{1}{q+1} $$.
+  This is the case where $$ q $$ is an integer:
+  $$ s(q) = s(\frac{a}{1}) = \frac{1}{q+1} $$
+  </summary>
 
-For (2), since the path is reversed, we want care about the prefix of the string.
-Otherwise the reasoning is the same as for the Stern-Brocot tree:
+  The outer nodes $$ L^j $$ and $$ R^j $$ are the same as in the
+  Stern-Brocot tree, because the reversed path is the same. Hence it is
+  sufficient to detect when $$ q $$ is an integer.
+</details>
 
-$$
-  s'(f(S))
-   = s(f(R^jLT))
-   = f(L^jRT)
-$$
+<details>
 
-Define $$ f(T) = \frac{c}{d} $$. We can easily compute the following:
+  <summary>
+  2\. Find the successor for a node in the same layer:
+  $$ s(q) = \frac{1}{2 \lfloor q \rfloor + 1 - q} $$
+  </summary>
 
-$$
-\begin{eqnarray}
-  f(LT)    &=& \frac{c}{c+d}        \\
-  f(RT)    &=& \frac{c+d}{d}        \\
-  f(R^jLT) &=& \frac{c+j(c+d)}{c+d} \\
-  f(L^jRT) &=& \frac{c+d}{j(c+d)+d} \\
-\end{eqnarray}
-$$
+  Since the path is reversed, we want care about the prefix of the string.
+  Otherwise the reasoning is the same as for the Stern-Brocot tree:
 
-We can now find the values of $$c, d \text{ and } j $$:
+  $$
+    s(f(S))
+     = s(f(R^jLT))
+     = f(L^jRT)
+  $$
 
-$$ q = \frac{a}{b} = f(S) = \frac{c+j(c+d)}{c+d} $$
+  Define $$ f(T) = \frac{c}{d} $$. We can easily compute the following:
 
-$$
-\begin{eqnarray}
-  b &=& c+d \text{ and } a = c+j(c+d) \\
-  j &=& \frac{a-c}{c+d} = \frac{a}{b} - \frac{c}{c+d}
-        \implies
-        j = \left\lfloor j \right\rfloor
-          = \left\lfloor \frac{a}{b} \right\rfloor
-          = \lfloor q \rfloor \\
-  c &=& a-j(c+d) = a - \lfloor q \rfloor b \\
-  d &=& b - c = b - a + \lfloor q \rfloor b
-\end{eqnarray}
-$$
+  $$
+  \begin{eqnarray}
+    f(R^jLT) &=& \frac{c+j(c+d)}{c+d} \\
+    f(L^jRT) &=& \frac{c+d}{j(c+d)+d} \\
+  \end{eqnarray}
+  $$
 
-This lets us determine $$ s'(q) $$ for case (2):
+  Thus:
 
-$$
+  $$ q = \frac{a}{b} = f(S) = \frac{c+j(c+d)}{c+d} $$
 
-\begin{eqnarray}
-  s'(q) &=& s'(L^jRT) = \frac{c+d}{j(c+d)+d} \\
-        &=& \frac{b}{jb+d} \\
-        &=& \frac{b}{\lfloor q \rfloor b + b - a + \lfloor q \rfloor b} \\
-        &=& \frac{b}{2 \lfloor q \rfloor b + b - a} \\
-        &=& \frac{1}{2 \lfloor q \rfloor + 1 - q} \\
-\end{eqnarray}
+  We can now find the values of $$c, d \text{ and } j $$:
 
-$$
+  $$
+  \begin{eqnarray}
+    b &=& c+d \text{ and } a = c+j(c+d) \\
+    j &=& \frac{a-c}{c+d} = \frac{a}{b} - \frac{c}{c+d}
+          \implies
+          j = \left\lfloor j \right\rfloor
+            = \left\lfloor \frac{a}{b} \right\rfloor
+            = \lfloor q \rfloor \\
+    c &=& a-j(c+d) = a - \lfloor q \rfloor b \\
+    d &=& b - c = b - a + \lfloor q \rfloor b
+  \end{eqnarray}
+  $$
 
-Combining the two cases.
+  This lets us determine $$ s(q) $$ for this case:
 
-$$
-  s'(q) =
-  \begin{cases}
-    \frac{1}{q+1}                         & b = 1\\
-    \frac{1}{2 \lfloor q \rfloor + 1 - q} & b \ne 1\\
-  \end{cases}
-$$
+  $$
 
-However, we can combine the two cases because:
-$$
-  b = 1 \implies
-  q = \lfloor q \rfloor \implies
-  \frac{1}{q+1} = \frac{1}{2 \lfloor q \rfloor + 1 - q}
-$$
+  \begin{eqnarray}
+    s(q) &=& s(L^jRT) = \frac{c+d}{j(c+d)+d} \\
+          &=& \frac{b}{jb+d} \\
+          &=& \frac{b}{\lfloor q \rfloor b + b - a + \lfloor q \rfloor b} \\
+          &=& \frac{b}{2 \lfloor q \rfloor b + b - a} \\
+          &=& \frac{1}{2 \lfloor q \rfloor + 1 - q} \\
+  \end{eqnarray}
+  $$
+
+</details>
+
+<details>
+  <summary>
+  However, the two cases can be combined into one.
+  </summary>
+
+  For case (1), $$ q $$ is an integer hence:
+
+  $$
+    q = \lfloor q \rfloor \implies
+    \frac{1}{q+1} = \frac{1}{2 \lfloor q \rfloor + 1 - q}
+  $$
+
+</details>
 
 Giving us a final, simple formula for iterating through the rationals:
 
 $$
-  s'(q) = \frac{1}{2 \lfloor q \rfloor + 1 - q}
+  s(q) = \frac{1}{2 \lfloor q \rfloor + 1 - q}
 $$
 
 TODO: Hide long parts of the proof (both this section and previous).
