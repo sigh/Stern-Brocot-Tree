@@ -8,17 +8,28 @@ class SternBrocotTree {
     return [v, [s[0], v], [v, s[1]]];
   }
 
+  static parentState(s) {
+    const [s0, s1] = s;
+    if (s0[0]+s0[1] < s1[0]+s1[1]) {
+      // We are a left branch.
+      return [s0, [s1[0] - s0[0], s1[1] - s0[1]]];
+    } else {
+      // We are the right branch.
+      return [[s0[0] - s1[0], s0[1] - s1[1]], s1];
+    }
+  }
+
   // Adjacent states on the same layer.
   // From https://www.researchgate.net/publication/221440223_Recounting_the_Rationals_Twice
 
   static nextState(s) {
-    const j = (s[0][1]+s[0][0]-1)/(s[1][1]+s[1][0])
-    const k = (j<<1)+1
+    const j = (s[0][1]+s[0][0]-1n)/(s[1][1]+s[1][0])
+    const k = (j<<1n)+1n
     return [s[1], [s[1][0]*k-s[0][0], s[1][1]*k-s[0][1]]];
   };
   static prevState(s) {
-    const j = (s[1][1]+s[1][0]-1)/(s[0][1]+s[0][0])
-    const k = (j<<1)+1
+    const j = (s[1][1]+s[1][0]-1n)/(s[0][1]+s[0][0])
+    const k = (j<<1n)+1n
     return [[s[0][0]*k-s[1][0], s[0][1]*k-s[1][1]], s[0]];
   };
 }
@@ -33,15 +44,25 @@ class CalkinWilfTree {
     return [s, [s[0], m], [m, s[1]]]
   }
 
+  static parentState(s) {
+    if (s[0] < s[1]) {
+      // We are the left branch.
+      return [s[0], s[1]-s[0]];
+    } else {
+      // We are the right brach.
+      return [s[0]-s[1], s[1]];
+    }
+  }
+
   // Adjacent states on the same layer.
   static nextState(s) {
     const j = s[0]/s[1]
-    const k = (j<<1)+1
+    const k = (j<<1n)+1n
     return [s[1], k*s[1]-s[0]]
   }
   static prevState(s) {
     const j = s[1]/s[0]
-    const k = (j<<1)+1
+    const k = (j<<1n)+1n
     return [k*s[0]-s[1], s[0]]
   }
 }
@@ -177,11 +198,28 @@ class TreeView {
     this._drawTree(selectedNodeId, config);
   }
 
+  static _MAX_CACHE_DELTA = 8n;
+
   _lookupCache(minD, minI, maxI, config) {
     let cache = this._cache;
 
+    const m = this.constructor._MAX_CACHE_DELTA;
     if (!cache.valid) return null;
-    if (minD < cache.minD) return null;  // TODO: handle this case.
+    if (minD < cache.minD-m) return null;
+
+    if (minD < cache.minD) {
+      // We are shallower than the cache. Adjust cache to our depth.
+      // For simplicity, only use one cache value so we don't have to deal
+      // with duplicates.
+      let node = cache.initialNodes[0];
+      const diffD = cache.minD - minD;
+      for (let j = 0; j < diffD; j++) node[1] = config.parentState(node[1]);
+      node[0] >>= diffD;
+      cache.initialNodes = [node];
+      cache.minI = node[0];
+      cache.maxI = node[0]+1n;
+      cache.minD = minD;
+    }
 
     // Cache depth is at our level or shallower.
     // Normalize I to the cache depth and find the appropriate bounds.
@@ -189,15 +227,33 @@ class TreeView {
     const targetMinI = minI >> diffD;
     const targetMaxI = ((maxI-1n) >> diffD) + 1n;
 
-    if (targetMinI < cache.minI || targetMaxI > cache.maxI) return null;
+    if (targetMinI < cache.minI-m || targetMaxI > cache.maxI+m) {
+      return null;
+    }
 
     let stack = [];
     const iWidth = 1n << diffD;
-    for (let j = 0; j < cache.initialNodes.length; j++) {
+    cache.initialNodes.sort((a,b) => a[0]<b[0] ? -1 : a[0] > b[0] ? 1 : 0);
+
+    // Fill in all the nodes directly in the cache.
+    const cacheLen = cache.initialNodes.length;
+    for (let j = 0; j < cacheLen; j++) {
       const [iStart, s] = cache.initialNodes[j];
       if (iStart >= targetMinI && iStart < targetMaxI) {
         stack.push([iStart << diffD, iWidth, s]);
       }
+    }
+    // Populate any values before the cache.
+    for (let i = cache.minI-1n, s = cache.initialNodes[0][1];
+         i >= targetMinI; i--) {
+      s = config.prevState(s);
+      stack.push([i << diffD, iWidth, s]);
+    }
+    // Populate any values after the cache.
+    for (let i = cache.maxI, s = cache.initialNodes[cacheLen-1][1];
+         i < targetMaxI; i++) {
+      s = config.nextState(s);
+      stack.push([i << diffD, iWidth, s]);
     }
 
     return stack;
@@ -471,7 +527,6 @@ class Renderer {
   }
 
   _drawBranches(ctx, canvasX, canvasY, nodeHeight, selectionType) {
-    if (nodeHeight < 2) return;
     ctx.lineWidth = nodeHeight/100;
     ctx.beginPath();
     ctx.moveTo(canvasX - nodeHeight*0.5, canvasY + nodeHeight*0.75);
@@ -538,9 +593,6 @@ class Renderer {
   // The range of depths visible in the current viewport.
   // Returns the half-open interval [minD, maxD).
   depthRange() {
-    // TODO: Optimize logs.
-    //  - factor them out.
-    //  - keep track of log scale?
     const viewport = this._viewport;
     const scale = viewport.scale;
     const origin = viewport.origin;
@@ -550,7 +602,7 @@ class Renderer {
     if (minD < 0) minD = 0n;
 
     // Exclude nodes which are too small.
-    const minNodeHeight = 0.5;
+    const minNodeHeight = 1;
     const minLayerHeight = viewport.fromCanvasY(minNodeHeight);
     let maxD = MathHelpers.log2BigInt(scale/minLayerHeight) - 1n;
 
