@@ -342,6 +342,12 @@ class TreeView {
       renderer.drawSeedNode(1, layerWidth, config.seedValues[1]);
     }
 
+    // Draw the tree branches for the top of the drawing stack.
+    for (let j = 0; j < stack.length; j++) {
+      let [d, i, xStart, layerWidth, s, onSelectedBranch] = stack[j];
+      renderer.drawTreeBranches(xStart, layerWidth);
+    }
+
     // Draw nodes.
     while (stack.length) {
       let [d, i, xStart, layerWidth, s, onSelectedBranch] = stack.pop();
@@ -359,7 +365,7 @@ class TreeView {
         }
       }
 
-      const rect = renderer.drawNode(d, xStart, layerWidth, v, selectionType);
+      const rect = renderer.drawNode(xStart, layerWidth, v, selectionType);
       this._addNodeHitbox(d, i, rect);
 
       i <<= 1n;
@@ -526,23 +532,52 @@ class Renderer {
     return rect;
   }
 
-  _drawBranches(ctx, canvasX, canvasY, nodeHeight, selectionType) {
+  _drawBranch(ctx, canvasX, canvasY, nodeHeight, dir, color) {
+    if (color) {
+      ctx.save();
+      ctx.strokeStyle = color;
+    }
+
     ctx.lineWidth = nodeHeight/100;
     ctx.beginPath();
-    ctx.moveTo(canvasX - nodeHeight*0.5, canvasY + nodeHeight*0.75);
     ctx.lineTo(canvasX, canvasY);
-    ctx.lineTo(canvasX + nodeHeight*0.5, canvasY + nodeHeight*0.75);
+    ctx.lineTo(canvasX + dir*nodeHeight*0.5, canvasY + nodeHeight*0.75);
     ctx.stroke();
 
-    if (selectionType > Renderer.SELECT_FINAL) {
-      const sign = selectionType == Renderer.SELECT_LEFT ? -1 : 1;
-      ctx.save();
-      ctx.strokeStyle = Renderer._PATH_COLOR;
-      ctx.beginPath();
-      ctx.lineTo(canvasX, canvasY);
-      ctx.lineTo(canvasX + sign*nodeHeight*0.5, canvasY + nodeHeight*0.75);
-      ctx.stroke();
+    if (color) {
       ctx.restore();
+    }
+  }
+
+  // Draw a full tree of branches starting at the node at xMin.
+  // Keep drawing until the nodes are too small to see. We don't bother cropping
+  // since this the main loop is size independant so should always be bounded
+  // in time, assuming that layerWidth has already been constrained.
+  drawTreeBranches(xMin, layerWidth) {
+    const viewport = this._viewport;
+    const origin = viewport.origin;
+
+    const layerHeight = layerWidth >> 1n;
+    let nodeHeight = viewport.toCanvasY(layerHeight);
+
+    const x = xMin + layerHeight;
+    let canvasX = viewport.toCanvasX(x - origin.x);
+
+    const yMin = layerHeight;
+    const canvasYMin = viewport.toCanvasY(origin.y - yMin);
+    let canvasY = canvasYMin - nodeHeight*0.5;
+
+    let ctx = this._ctx;
+    let n = 1;
+    while (nodeHeight > 0.5 && canvasY) {
+      for (let j = 0; j < n; j++) {
+        this._drawBranch(ctx, canvasX+j*nodeHeight*2, canvasY, nodeHeight, -1);
+        this._drawBranch(ctx, canvasX+j*nodeHeight*2, canvasY, nodeHeight, 1);
+      }
+      n <<= 1;
+      canvasY += nodeHeight*0.75;
+      canvasX -= nodeHeight*0.5;
+      nodeHeight *= 0.5;
     }
   }
 
@@ -602,9 +637,9 @@ class Renderer {
     if (minD < 0) minD = 0n;
 
     // Exclude nodes which are too small.
-    const minNodeHeight = 1;
+    const minNodeHeight = 5;
     const minLayerHeight = viewport.fromCanvasY(minNodeHeight);
-    let maxD = MathHelpers.log2BigInt(scale/minLayerHeight) - 1n;
+    let maxD = MathHelpers.log2BigInt(scale/minLayerHeight) + 1n;
 
     // Exclude nodes which are below the viewport.
     // If targetYCoord  <= 0, then the whole tree is visible.
@@ -650,9 +685,8 @@ class Renderer {
     return this._viewport.scale;
   }
 
-  drawNode(d, xMin, layerWidth, frac, selectionType) {
+  drawNode(xMin, layerWidth, frac, selectionType) {
     const viewport = this._viewport;
-    const scale = viewport.scale;
     const origin = viewport.origin;
 
     const layerHeight = layerWidth >> 1n;
@@ -666,9 +700,12 @@ class Renderer {
     const canvasYMin = viewport.toCanvasY(origin.y - yMin);
     const canvasYMid = canvasYMin - nodeHeight*0.5;
 
-    // Draw the branches.
-    let ctx = this._ctx;
-    this._drawBranches(ctx, canvasX, canvasYMid, nodeHeight, selectionType);
+    // Draw the selected branch.
+    if (selectionType > Renderer.SELECT_FINAL) {
+      this._drawBranch(this._ctx, canvasX, canvasYMid, nodeHeight,
+                       selectionType == Renderer.SELECT_LEFT ? -1 : 1,
+                       Renderer._PATH_COLOR);
+    }
 
     // Draw the fraction.
     let color = null;
