@@ -177,34 +177,42 @@ class TreeView {
     this._drawTree(selectedNodeId, config);
   }
 
+  _lookupCache(minD, minI, maxI, config) {
+    let cache = this._cache;
+
+    if (!cache.valid) return null;
+    if (minD < cache.minD) return null;  // TODO: handle this case.
+
+    // Cache depth is at our level or shallower.
+    // Normalize I to the cache depth and find the appropriate bounds.
+    const diffD = minD - cache.minD;
+    const targetMinI = minI >> diffD;
+    const targetMaxI = ((maxI-1n) >> diffD) + 1n;
+
+    if (targetMinI < cache.minI || targetMaxI > cache.maxI) return null;
+
+    let stack = [];
+    const iWidth = 1n << diffD;
+    for (let j = 0; j < cache.initialNodes.length; j++) {
+      const [iStart, s] = cache.initialNodes[j];
+      if (iStart >= targetMinI && iStart < targetMaxI) {
+        stack.push([iStart << diffD, iWidth, s]);
+      }
+    }
+
+    return stack;
+  }
+
   // Find all nodes where depth == minD.
   // The final positions don't depend on the viewport so can be cached.
   _findInitialNodes(minD, expMinD, xRange, config) {
     const [minI, maxI] = this._renderer.iRange(minD, expMinD, xRange);
 
-    let stack = [];
-
-    // Try to initialize the stack with the cache.
-    // As long as the cache completely covers the current set we can use it.
-    let cache = this._cache;
-    if (cache.valid && minD >= cache.minD) {
-      const diffD = minD - cache.minD;
-      const targetMinI = minI >> diffD;
-      const targetMaxI = ((maxI-1n) >> diffD) + 1n;
-      if (targetMinI >= cache.minI && targetMaxI <= cache.maxI) {
-        const iWidth = 1n << diffD;
-        for (let j = 0; j < cache.initialNodes.length; j++) {
-          const [iStart, s] = cache.initialNodes[j];
-          if (iStart >= targetMinI && iStart < targetMaxI) {
-            stack.push([iStart << diffD, iWidth, s]);
-          }
-        }
-      }
-    }
+    let stack = this._lookupCache(minD, minI, maxI, config);
 
     // We didn't populate from the cache, so we have to start from the start.
-    if (!stack.length) {
-      stack.push([0n, expMinD, config.initState]);
+    if (stack === null) {
+      stack = [[0n, expMinD, config.initState]];
     }
 
     let initialNodes = [];
@@ -228,6 +236,7 @@ class TreeView {
       }
     }
 
+    let cache = this._cache;
     cache.valid = true;
     cache.minD = minD;
     cache.minI = minI;
