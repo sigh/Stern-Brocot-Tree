@@ -16,33 +16,39 @@ Then we can iterate over the grid such that we eventually reach each number.
 
 TODO: Insert demo
 
->  Given this mapping from $$ \mathbb{N}^+ \to \mathbb{Q}^+ $$ we can
->  construct a mapping $$ \mathbb{N} \to \mathbb{Q} $$.
->
->  For a bijective mapping $$ f(q): \mathbb{N}^+ \to \mathbb{Q}^+ $$, define
->  $$ g(q): \mathbb{N} \to \mathbb{Q} $$ as:
->
->  $$
->    g(n) =
->    \begin{cases}
->      0                 & \text{ for } n = 0 \\
->      f(\frac{n}{2})    & \text{ for } n = 0 \mod{2} \\
->      -f(\frac{n+1}{2}) & \text{ for } n= 1 \mod{2} \\
->    \end{cases}
->  $$
->
->  The first few elements of \(g\) are:
->
->  $$
->    0,
->    \frac{1}{1},
->    -\frac{1}{1},
->    \frac{1}{2},
->    -\frac{1}{2},
->    \frac{2}{1},
->    -\frac{2}{1},
->    \dots
->  $$
+<details>
+
+  <summary>
+  Given this mapping from $$ \mathbb{N}^+ \to \mathbb{Q}^+ $$ we can
+  construct a mapping $$ \mathbb{N} \to \mathbb{Q} $$.
+  </summary>
+
+  For a bijective mapping $$ f(q): \mathbb{N}^+ \to \mathbb{Q}^+ $$, define
+  $$ g(q): \mathbb{N} \to \mathbb{Q} $$ as:
+
+  $$
+    g(n) =
+    \begin{cases}
+      0                 & \text{ for } n = 0 \\
+      f(\frac{n}{2})    & \text{ for } n = 0 \mod{2} \\
+      -f(\frac{n+1}{2}) & \text{ for } n= 1 \mod{2} \\
+    \end{cases}
+  $$
+
+  The first few elements of \(g\) are:
+
+  $$
+    0,
+    \frac{1}{1},
+    -\frac{1}{1},
+    \frac{1}{2},
+    -\frac{1}{2},
+    \frac{2}{1},
+    -\frac{2}{1},
+    \dots
+  $$
+
+</details>
 
 However, this mapping is not ideal:
 
@@ -100,93 +106,111 @@ the left, and $$ \frac{m'}{n'} $$ is it's nearest ancestor to the right.
 
 This gives us several nice properties:
 
->  The elements are unique and appear in ascending order.
->
->  All the fractions in the initial sequence
->  $$ \left( \frac{0}{1}, \frac{1}{0} \right) $$ are unique and ordered.
->
->  Given existing adjacent fractions $$ \frac{m}{n} $$ and $$ \frac{m'}{n'} $$:
->
->  $$ \frac{m}{n} < \frac{m'}{n'} \implies mn' < nm' $$
->
->  Every new fraction $$ \frac{m+m'}{n+n'} $$ is inserted in order, and is
->  distinct from the existing elements because:
->
->  $$ mn' < nm' \implies mn+mn' < nm+nm' \implies \frac{m}{n} < \frac{m+m'}{n+n'} $$
->
->  $$ mn' < nm' \implies mn'+m'n' < m'n+m'n' \implies \frac{m+m'}{n+n'} < \frac{m'}{n'} $$
+<details>
 
-> Every element appears in its lowest form.
->
-> First we show that for any adjacent fractions
-> $$ \frac{m}{n} $$ and $$ \frac{m'}{n'} $$ that:
->
-> $$ m'n − mn' = 1 $$
->
-> This is true for the initial sequence
-> $$ \left( \frac{0}{1}, \frac{1}{0} \right) $$: $$ 1 \times 1 - 0 \times 0 = 1 $$.
->
-> Then whenever we insert a new fraction $$ \frac{m+m'}{n+n'} $$, this property
-> holds for the two new pairs
-> $$ \left( \frac{m}{n} , \frac{m+m'}{n+n'} \right) $$ and
-> $$ \left( \frac{m+m'}{n+n'}, \frac{m'}{n'} \right) $$:
->
-> $$ (m + m')n − m(n + n') = mn + m'n - mn - mn' = m'n - mn' = 1 $$
->
-> $$ m'(n + n') - (m + m')n' = m'n + m'n' - mn' - m'n' = m'n - mn' = 1 $$
->
-> This is sufficient to show that every fraction is in its lowest form.
-> If we have a fraction $$ \frac{km}{kn} $$, then:
->
-> $$ 1 = m'kn - kmn' = k(m'n - mn') \implies k = 1 $$
+  <summary>
+  The elements are unique and appear in ascending order.
+  </summary>
 
-> Every positive rational number is present.
->
-> Take any positive rational $$ \frac{a}{b} $$.
-> Initially we have:
->
-> $$ \frac{0}{1} < \frac{a}{b} < \frac{1}{0} $$
->
-> Then, given $$ \frac{a}{b} $$ exists between adjacent elements
-> $$ \frac{m}{n} < \frac{a}{b} < \frac{m'}{n'} $$ we compare
-> $$ \frac{a}{b} $$ with the mediant $$ \frac{m+m'}{n+n'} $$:
->
-> $$
->  \begin{cases}
->     \text{If } \frac{a}{b} = \frac{m+m'}{n+n'} \text{ we are done} \\
->     \text{If } \frac{a}{b} < \frac{m+m'}{n+n'} \text{ replace }
->       \frac{m'}{n'} \text{ with } \frac{m+m'}{n+n'} \\
->     \text{If } \frac{a}{b} > \frac{m+m'}{n+n'} \text{ replace }
->       \frac{m}{n} \text{ with } \frac{m+m'}{n+n'} \\
->  \end{cases}
-> $$
->
-> To see that process must terminate:
->
-> $$ \frac{m}{n} < \frac{a}{b} < \frac{m'}{n'} $$
->
-> $$ \implies an-bm \ge 1 \text{ and } bm'-an' \ge 1 $$
->
-> $$ \implies (m'+n')(an-bm) + (m+n)(bm'-an') \ge (m'+n') + (m+n) $$
->
-> Combining this with the fact that $$ m'n − mn' = 1 $$ (proven above):
->
-> $$
-> \begin{eqnarray}
->   & & (m'+n')(an-bm) + (m+n)(bm'-an') \\
->   &=& m'an-m'bm+n'an-n'bm + mbm'-man'+nbm'-nan' \\
->   &=& m'an-n'bm - man'+nbm' \\
->   &=& (m'n−mn')(a+b) \\
->   &=& a+b \\
-> \end{eqnarray}
-> $$
->
-> $$ \implies a+b \ge m'+n' + m+n $$
->
-> Since $$ m'+n' + m+n $$ increase at every step in the process, it must
-> eventually equal to $$ a + b $$.
+  All the fractions in the initial sequence
+  $$ \left( \frac{0}{1}, \frac{1}{0} \right) $$ are unique and ordered.
 
-Thus the Stern-Brocot Tree is a binary search tree over all the positive=
+  Given existing adjacent fractions $$ \frac{m}{n} $$ and $$ \frac{m'}{n'} $$:
+
+  $$ \frac{m}{n} < \frac{m'}{n'} \implies mn' < nm' $$
+
+  Every new fraction $$ \frac{m+m'}{n+n'} $$ is inserted in order, and is
+  distinct from the existing elements because:
+
+  $$ mn' < nm' \implies mn+mn' < nm+nm' \implies \frac{m}{n} < \frac{m+m'}{n+n'} $$
+
+  $$ mn' < nm' \implies mn'+m'n' < m'n+m'n' \implies \frac{m+m'}{n+n'} < \frac{m'}{n'} $$
+
+</details>
+
+<details>
+
+  <summary>
+  Every element appears in its lowest form.
+  </summary>
+
+  First we show that for any adjacent fractions
+  $$ \frac{m}{n} $$ and $$ \frac{m'}{n'} $$ that:
+
+  $$ m'n − mn' = 1 $$
+
+  This is true for the initial sequence
+  $$ \left( \frac{0}{1}, \frac{1}{0} \right) $$: $$ 1 \times 1 - 0 \times 0 = 1 $$.
+
+  Then whenever we insert a new fraction $$ \frac{m+m'}{n+n'} $$, this property
+  holds for the two new pairs
+  $$ \left( \frac{m}{n} , \frac{m+m'}{n+n'} \right) $$ and
+  $$ \left( \frac{m+m'}{n+n'}, \frac{m'}{n'} \right) $$:
+
+  $$ (m + m')n − m(n + n') = mn + m'n - mn - mn' = m'n - mn' = 1 $$
+
+  $$ m'(n + n') - (m + m')n' = m'n + m'n' - mn' - m'n' = m'n - mn' = 1 $$
+
+  This is sufficient to show that every fraction is in its lowest form.
+  If we have a fraction $$ \frac{km}{kn} $$, then:
+
+  $$ 1 = m'kn - kmn' = k(m'n - mn') \implies k = 1 $$
+
+</details>
+
+<details>
+
+  <summary>
+  Every positive rational number is present.
+  </summary>
+
+  Take any positive rational $$ \frac{a}{b} $$.
+  Initially we have:
+
+  $$ \frac{0}{1} < \frac{a}{b} < \frac{1}{0} $$
+
+  Then, given $$ \frac{a}{b} $$ exists between adjacent elements
+  $$ \frac{m}{n} < \frac{a}{b} < \frac{m'}{n'} $$ we compare
+  $$ \frac{a}{b} $$ with the mediant $$ \frac{m+m'}{n+n'} $$:
+
+  $$
+   \begin{cases}
+      \text{If } \frac{a}{b} = \frac{m+m'}{n+n'} \text{ we are done} \\
+      \text{If } \frac{a}{b} < \frac{m+m'}{n+n'} \text{ replace }
+        \frac{m'}{n'} \text{ with } \frac{m+m'}{n+n'} \\
+      \text{If } \frac{a}{b} > \frac{m+m'}{n+n'} \text{ replace }
+        \frac{m}{n} \text{ with } \frac{m+m'}{n+n'} \\
+   \end{cases}
+  $$
+
+  To see that process must terminate:
+
+  $$ \frac{m}{n} < \frac{a}{b} < \frac{m'}{n'} $$
+
+  $$ \implies an-bm \ge 1 \text{ and } bm'-an' \ge 1 $$
+
+  $$ \implies (m'+n')(an-bm) + (m+n)(bm'-an') \ge (m'+n') + (m+n) $$
+
+  Combining this with the fact that $$ m'n − mn' = 1 $$ (proven above):
+
+  $$
+  \begin{eqnarray}
+    & & (m'+n')(an-bm) + (m+n)(bm'-an') \\
+    &=& m'an-m'bm+n'an-n'bm + mbm'-man'+nbm'-nan' \\
+    &=& m'an-n'bm - man'+nbm' \\
+    &=& (m'n−mn')(a+b) \\
+    &=& a+b \\
+  \end{eqnarray}
+  $$
+
+  $$ \implies a+b \ge m'+n' + m+n $$
+
+  Since $$ m'+n' + m+n $$ increase at every step in the process, it must
+  eventually equal to $$ a + b $$.
+
+</details>
+
+Thus the Stern-Brocot Tree is a binary search tree over all the positive
 rationals!
 
 # Indexing with Matrices
@@ -255,31 +279,35 @@ TODO: Prove
 
 The concrete algorithm is:
 
-```python
-def toNatural(q):
-  S, n = I, 1
+<div class="columns">
 
-  while f(S) != q:
-    if f(S) < q:
-      S, n = S*L, n*2
-    else:
-      S, n = S*R, n*2+1
+  ```python
+  def toNatural(q):
+    S, n = I, 1
 
-  return n
-```
+    while f(S) != q:
+      if f(S) < q:
+        S, n = S*L, n*2
+      else:
+        S, n = S*R, n*2+1
 
-```python
-def toRational(n):
-  S = I
+    return n
+  ```
 
-  while n > 1:
-    if n%2 == 0:
-      S, n = S*L, n/2
-    else:
-      S, n = S*R, (n-1)/2
+  ```python
+  def toRational(n):
+    S = I
 
-  return f(S)
-```
+    while n > 1:
+      if n%2 == 0:
+        S, n = S*L, n/2
+      else:
+        S, n = S*R, (n-1)/2
+
+    return f(S)
+  ```
+
+</div>
 
 We now have a nice bijection. We can iterate over all the rationals by
 repeatedly evaluating `q = toRational(toNatural(q)+1)`.
@@ -331,31 +359,36 @@ def toNatural(q=a/b):
   return n
 ```
 
-> We can optimize `toNatural` further by replacing the
-> repeated subtractions with division.
->
->```python
->def toNatural(q=a/b):
->  n, rem, t = 1, 1, 1
->
->  while rem:
->    rem, v = a%b, a/b
->    a, b = b, rem
->    n, t = (n<<v) + ((t<<v)-t), 1-t
->
->  return n>>1
->```
->
-> Note:
->
-> * The main loop is the Euclidean `gcd` algorithm.
-> * `t` swaps between `0` and `1`. It starts at `1` because we start by assuming
->   that `a  > b`.
-> * `n<<v` $$ = n 2^v $$ shifts `n` to make room for `v` bits.
-> * `(t<<v)-t` $$ = t(2^v-1) $$ creates a string of `t`s to add to the end
->   of  `n`.
-> * `n>>1` removes the last bit, as the algorithm goes one iteration too far.
-    We want to stop when `a == b`, not when they reach `0`.
+<details>
+  <summary>
+  We can optimize `toNatural` further by replacing the
+  repeated subtractions with division.
+  </summary>
+
+  ```python
+  def toNatural(q=a/b):
+    n, rem, t = 1, 1, 1
+
+    while rem:
+      rem, v = a%b, a/b
+      a, b = b, rem
+      n, t = (n<<v) + ((t<<v)-t), 1-t
+
+    return n>>1
+  ```
+
+   Notes:
+
+   * The main loop is the Euclidean `gcd` algorithm.
+   * `t` swaps between `0` and `1`. It starts at `1` because we start by assuming
+     that `a  > b`.
+   * `n<<v` $$ = n 2^v $$ shifts `n` to make room for `v` bits.
+   * `(t<<v)-t` $$ = t(2^v-1) $$ creates a string of `t`s to add to the end
+     of  `n`.
+   * `n>>1` removes the last bit, as the algorithm goes one iteration too far.
+     We want to stop when `a == b`, not when they reach `0`.
+
+</details>
 
 These are exactly the steps taken by
 [Euclid's algorithm](https://en.wikipedia.org/wiki/Euclidean_algorithm) for
@@ -434,39 +467,44 @@ Now we need to determine $$ j $$. If we were after the leading $$ R $$s we
 could take advantage of what we learnt from Euclid's algorithm above. With
 a clever manipulation of matrices we can still use it to get:
 
-> $$ S = \begin{pmatrix} n & n' \\ m & m' \end{pmatrix} \implies
->    j = \left\lfloor \frac{n'+m'-1}{n+m} \right\rfloor  $$
->
-> We can use the matrix transposition to reverse the path because
-> $$ (AB)^T = B^T A^T $$ for any matrix. Thus:
->
-> $$ S^T = (PLR^j)^T = R^{Tj}L^TP^T $$
->
-> Then:
->
-> $$
-> R^T = L \text{ and } L^T = R \text{ by inspection}
-> $$
->
-> $$
-> \implies S^T = L^jRP^T
-> $$
->
-> $$
-> \implies
-> f(S^T) = f(L^jRP^T) = f\left(\begin{pmatrix} n & m \\ n' & m' \end{pmatrix}\right)
-> = \frac{n'+m'}{n+m}
-> $$
->
-> Because $$ R $$ and $$ L $$ are transposes, $$ S^T $$ represents a valid path,
-> and thus $$ q = \frac{n'+m'}{n+m} $$ is a valid rational in the tree.
-> This allows us to determine $$ j $$ by finding the number of _leading_ $$ L $$s
-> in the path representation of $$ q $$.
->
-> Given our algorithm above, this is the number of times we can subtract
-> $$ n+m $$ from $$ n'+m' $$ without reaching $$ 0 $$, thus:
->
-> $$ j = \left\lfloor \frac{n'+m'-1}{n+m} \right\rfloor  $$
+<details>
+  <summary>
+  $$ S = \begin{pmatrix} n & n' \\ m & m' \end{pmatrix} \implies
+     j = \left\lfloor \frac{n'+m'-1}{n+m} \right\rfloor  $$
+  </summary>
+  
+  We can use the matrix transposition to reverse the path because
+  $$ (AB)^T = B^T A^T $$ for any matrix. Thus:
+  
+  $$ S^T = (PLR^j)^T = R^{Tj}L^TP^T $$
+  
+  Then:
+  
+  $$
+  R^T = L \text{ and } L^T = R \text{ by inspection}
+  $$
+  
+  $$
+  \implies S^T = L^jRP^T
+  $$
+  
+  $$
+  \implies
+  f(S^T) = f(L^jRP^T) = f\left(\begin{pmatrix} n & m \\ n' & m' \end{pmatrix}\right)
+  = \frac{n'+m'}{n+m}
+  $$
+  
+  Because $$ R $$ and $$ L $$ are transposes, $$ S^T $$ represents a valid path,
+  and thus $$ q = \frac{n'+m'}{n+m} $$ is a valid rational in the tree.
+  This allows us to determine $$ j $$ by finding the number of _leading_ $$ L $$s
+  in the path representation of $$ q $$.
+  
+  Given our algorithm above, this is the number of times we can subtract
+  $$ n+m $$ from $$ n'+m' $$ without reaching $$ 0 $$, thus:
+  
+  $$ j = \left\lfloor \frac{n'+m'-1}{n+m} \right\rfloor  $$
+  
+</details>
 
 Putting it all together we have:
 

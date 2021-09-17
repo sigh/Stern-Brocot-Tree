@@ -27,3 +27,13 @@ canvas {
   margin: auto;
   display: block;
 }
+
+.columns {
+  display: flex;
+  gap: 20px;
+}
+
+summary p {
+  display: inline-block;
+  margin: 0;
+}
