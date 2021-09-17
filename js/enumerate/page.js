@@ -24,6 +24,10 @@ const convertBlockquotes = () => {
 const initPage = () => {
   convertBlockquotes();
 
-  let canvas = document.getElementById('stern-brocot-demo');
-  new TreeController(canvas);
+  let sternBrocotCanvas = document.getElementById('stern-brocot-demo');
+  new TreeController(sternBrocotCanvas);
+
+  let calkinWilfCanvas = document.getElementById('calkin-wilf-demo');
+  let calkinWilf = new TreeController(calkinWilfCanvas);
+  calkinWilf.setTreeType('calkin-wilf');
 };

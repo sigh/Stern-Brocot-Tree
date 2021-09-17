@@ -68,6 +68,7 @@ class TreeController extends BaseEventTarget {
     this._viewport.addEventListener('mousemove', (coord) => {
       this._updateSelection(coord);
     });
+    this._canvas.style.cursor = 'grab';
 
     let renderer = new Renderer(canvas, this._viewport);
     this._tree = new TreeView(renderer);
@@ -91,7 +92,7 @@ class TreeController extends BaseEventTarget {
     if (this._hoverNodeId == nodeId) return;
     this._hoverNodeId = nodeId;
 
-    this._canvas.style.cursor = nodeId ? 'pointer' : 'auto'
+    this._canvas.style.cursor = nodeId ? 'pointer' : 'grab'
     this._update();
     this.dispatchEvent('selectionChange');
   }
@@ -122,7 +123,7 @@ class TreeController extends BaseEventTarget {
   }
 
   selectNodeByContinuedFraction(cf) {
-    const node = this._tree.nodeForContinuousFraction(
+    const node = this._tree.nodeForContinuedFraction(
       this._treeType, cf);
     this._stickyNodeId = node.nodeId;
     if (node.nodeId) {
@@ -261,13 +262,13 @@ class TreeView {
     let stack = [];
     const layerWidth = this._renderer.layerWidth(minD);
     for (let j = 0; j < drawStarts.length; j++) {
-      const [i, s0, s1] = drawStarts[j];
+      const [i, s] = drawStarts[j];
 
       // TODO: We can precompute all of these when finding iRange.
       const xStart = this._renderer.xStart(minD, i);
       const onSelectedBranch = i == truncatedSelectedId;
 
-      stack.push([minD, i, xStart, layerWidth, s0, s1, onSelectedBranch]);
+      stack.push([minD, i, xStart, layerWidth, s, onSelectedBranch]);
     }
 
     // Draw seed nodes.
@@ -355,7 +356,7 @@ class TreeView {
     return BigInt('0b1' + nodeIdChars.join(''));
   }
 
-  nodeForContinuousFraction(treeType, cf) {
+  nodeForContinuedFraction(treeType, cf) {
     let nodeIndex = 0n;
 
     let isRight = true;

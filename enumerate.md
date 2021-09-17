@@ -49,17 +49,15 @@ However, this mapping is not ideal:
 * The grid, by itself, has many duplicates because each rational
 $$ \frac{a}{b} $$ appears an infinite number of times as $$ \frac{ka}{kb} $$.
 These must be detected and skipped over.
-
 * Even detecting whether we should skip a fraction can be expensive. We must
   determine if $$ gcd(a,b) = 1 $$.
-
 * Without counting from the start, it's not easy to determine the index $$ n $$
   for a given rational $$ q $$ or vice-versa. It is difficult to compute
   how many fractions have been skipped over.
 
 Let's do better.
 
-# Stern-Brocot Tree
+# The Stern-Brocot Tree
 
 The [Stern-Brocot Tree](https://en.wikipedia.org/wiki/Stern%E2%80%93Brocot_tree)
 is a structure which contains all the positive rationals uniquely, in their
@@ -112,7 +110,7 @@ This gives us several nice properties:
 >  $$ \frac{m}{n} < \frac{m'}{n'} \implies mn' < nm' $$
 >
 >  Every new fraction $$ \frac{m+m'}{n+n'} $$ is inserted in order, and is
->  distict from the existing elements because:
+>  distinct from the existing elements because:
 >
 >  $$ mn' < nm' \implies mn+mn' < nm+nm' \implies \frac{m}{n} < \frac{m+m'}{n+n'} $$
 >
@@ -191,7 +189,7 @@ This gives us several nice properties:
 Thus the Stern-Brocot Tree is a binary search tree over all the positive=
 rationals!
 
-# Mapping to the Naturals
+# Indexing with Matrices
 
 Each rational in tree can be uniquely identified by the path taken to reach
 it in the tree. We will use:
@@ -199,7 +197,7 @@ it in the tree. We will use:
 * $$ L $$ to represent taking a left branch
 * $$ R $$ to represent taking a right branch
 
-For convinience we will also use:
+For convenience we will also use:
 
 * $$ I $$ to represent the empty path
 * Exponents to represent runs of the same value. i.e.
@@ -207,10 +205,10 @@ For convinience we will also use:
 
 For example
 $$
-  \frac{1}{1} = I \quad
-  \frac{2}{1} = R \quad
-  \frac{2}{5} = LLR = L^2R \quad
-  \frac{22}{7} = RRRLLLLLL = R^3L^6
+  \frac{1}{1} \to I \quad
+  \frac{2}{1} \to R \quad
+  \frac{2}{5} \to LLR = L^2R \quad
+  \frac{22}{7} \to RRRLLLLLL = R^3L^6
 $$
 
 This gives a bijection from the positive rationals to the finite strings made up
@@ -222,10 +220,10 @@ Then prepending the strings with a $$ 1 $$ lets us interpret the strings as
 natural numbers in binary. Using the same examples:
 
 $$
-  \frac{1}{1} = I \to \color{grey}1\color{black}_2 = 1 \quad
-  \frac{2}{1} = R \to \color{grey}1\color{black}1_2 = 3 \quad
-  \frac{2}{5} = L^2R \to \color{grey}1\color{black}001_2 = 9 \quad
-  \frac{22}{7} = R^3L^6 \to \color{grey}1\color{black}111000000_2 = 960
+  \frac{1}{1} \to I \to \color{grey}1\color{black}_2 = 1 \quad
+  \frac{2}{1} \to R \to \color{grey}1\color{black}1_2 = 3 \quad
+  \frac{2}{5} \to L^2R \to \color{grey}1\color{black}001_2 = 9 \quad
+  \frac{22}{7} \to R^3L^6 \to \color{grey}1\color{black}111000000_2 = 960
 $$
 
 This is a bijection $$ \mathbb{Q}^+ \to \mathbb{N}^+ $$ which is equivalent to
@@ -233,7 +231,7 @@ traversing the Stern-Brocot tree layer by layer, i.e. a breath-first traversal.
 
 TODO: demo
 
-To consisely describe this process, define the matricies:
+To concisely describe this process, define the matrices:
 
 $$
   I = \begin{pmatrix} 1 & 0 \\ 0 & 1 \end{pmatrix}
@@ -249,8 +247,9 @@ $$
   f\left(\begin{pmatrix} n & n' \\ m & m'\end{pmatrix}\right) = \frac{m+m'}{n+n'}
 $$
 
-Now the path strings we created above are _equations_ to generate a
-value in the tree!
+With these definitions, the path strings we created above are _equations_ to
+generate a value in the tree!
+Equivalently, we can think of the nodes of the tree being matrices themselves.
 
 TODO: Prove
 
@@ -258,39 +257,396 @@ The concrete algorithm is:
 
 ```python
 def toNatural(q):
-  s = I
-  n = 1
+  S, n = I, 1
 
-  while f(s) != q:
-    if f(s) < q:
-      s = s*L
-      n = n*2
+  while f(S) != q:
+    if f(S) < q:
+      S, n = S*L, n*2
     else:
-      s = s*R
-      n = n*2+1
+      S, n = S*R, n*2+1
 
   return n
 ```
 
 ```python
 def toRational(n):
-  s = I
+  S = I
 
   while n > 1:
     if n%2 == 0:
-      s = s*L
-      n = n/2
+      S, n = S*L, n/2
     else:
-      s = s*R
-      n = (n-1)/2
+      S, n = S*R, (n-1)/2
 
-  return f(s)
+  return f(S)
 ```
+
+We now have a nice bijection. We can iterate over all the rationals by
+repeatedly evaluating `q = toRational(toNatural(q)+1)`.
+
+However, this is not ideal -- let's see if we can iterate without having to
+repeatedly fall back to the natural number representation.
+
+# Optimizing with Euclid
+
+For any node in the tree $$ f(S) $$ we have:
+
+$$
+\begin{eqnarray}
+
+  f(S)  &=& f\left(\begin{pmatrix} n & n' \\ m & m'\end{pmatrix}\right)
+        &=& \frac{m+m'}{n+n'} \\
+
+  f(RS) &=& f\left(\begin{pmatrix} n & n' \\ m+n & m'+n'\end{pmatrix}\right)
+        = \frac{(m+n)+(m'+n')}{n+n'} &=& \frac{(m+m')+(n'+n')}{n+n'} \\
+
+  f(LS) &=& f\left(\begin{pmatrix} m+n & m'+n' \\ m & m'\end{pmatrix}\right)
+        = \frac{m+m'}{(m+n)+(m'+n')} &=& \frac{m+m'}{(m+m')+(n+n')}
+
+\end{eqnarray}
+$$
+
+This a simple relationship between a node and it's children without having to
+deal with the full matrix:
+
+$$
+\begin{eqnarray}
+  \frac{a}{b} = f(RS) &\iff& \frac{a-b}{n} = f(S) \\
+  \frac{a}{b} = f(LS) &\iff& \frac{a}{b-a} = f(S)
+\end{eqnarray}
+$$
+
+Providing us with a simpler `toNatural` algorithm:
+
+```python
+def toNatural(q=a/b):
+  n = 1
+
+  while a != b:
+    if a < b:
+      b, n = b - a, n*2
+    else:
+      a, n = a - b, n*2+1
+
+  return n
+```
+
+> We can optimize `toNatural` further by replacing the
+> repeated subtractions with division.
+>
+>```python
+>def toNatural(q=a/b):
+>  n, rem, t = 1, 1, 1
+>
+>  while rem:
+>    rem, v = a%b, a/b
+>    a, b = b, rem
+>    n, t = (n<<v) + ((t<<v)-t), 1-t
+>
+>  return n>>1
+>```
+>
+> Note:
+>
+> * The main loop is the Euclidean `gcd` algorithm.
+> * `t` swaps between `0` and `1`. It starts at `1` because we start by assuming
+>   that `a  > b`.
+> * `n<<v` $$ = n 2^v $$ shifts `n` to make room for `v` bits.
+> * `(t<<v)-t` $$ = t(2^v-1) $$ creates a string of `t`s to add to the end
+>   of  `n`.
+> * `n>>1` removes the last bit, as the algorithm goes one iteration too far.
+    We want to stop when `a == b`, not when they reach `0`.
+
+These are exactly the steps taken by
+[Euclid's algorithm](https://en.wikipedia.org/wiki/Euclidean_algorithm) for
+computing $$ \gcd(a, b) $$, which also highlights a direct connection between
+the path and the
+[continued fraction](https://en.wikipedia.org/wiki/Continued_fraction)
+representation of the rational!
+
+# Iterating
+
+To iterate, we will construct a successor function $$ s(S) $$ which can operate
+on the matrix representation. The index of $$ s(S) $$ in the natural number
+representation should be one added to that of $$ S $$.
+
+To do this we need to:
+
+1. Detect when we are at the end of the layer, and move to the next one.
+2. Find the successor for a node in the same layer.
+
+First, case (1).
+
+For the $$ n^{th} $$ layer
+(where $$ \frac{1}{1} $$ is layer $$ 0 $$),
+the first index is $$ 2^n \to L^n $$ and the last index is $$ 2^{n+1}-1 \to R^n $$.
+We can prove by induction that:
+
+$$
+
+R^n = \begin{pmatrix} 1 & 0 \\ n & 1 \end{pmatrix}
+\implies f(R^n) = n+1
+$$
+
+$$
+L^n = \begin{pmatrix} 1 & n \\ 0 & 1 \end{pmatrix}
+\implies f(L^n) = \frac{1}{n+1}
+$$
+
+This determines the behaviour at the end of a layer:
+$$
+  s\left(\begin{pmatrix} 1 & 0 \\ n & 1 \end{pmatrix}\right) =
+    \begin{pmatrix} 1 & n+1 \\ 0 & 1 \end{pmatrix}
+$$
+
+(Note: It is sufficient to check that the top-right entry is zero to match
+this case, since only the last entry is adjacent to $$ \frac{1}{0} $$.)
+
+For case (2), note that to increment a number in binary, we increment the least
+significant $$ 0 $$ digit, and set bits to the right to $$ 0 $$. For example:
+
+$$
+\color{grey}100\color{black}0_2 + 1_2 =  \color{grey}100\color{black}1_2 \quad
+\color{grey}10\color{black}011_2 + 1_2 = \color{grey}10\color{black}100_2 \quad
+            01111_2 + 1_2 =  10000_2 \quad
+$$
+
+In the path string this means finding the trailing $$ R $$s and
+preceding $$ L $$, and transposing them:
+
+$$
+  s(S)
+  = s(TLR^j)
+  = TRL^j
+$$ where $$ T $$ is an arbitrary prefix.
+
+Next we can use the inverse matrices to replace the suffix of $$ S $$ to
+obtain a equation for $$ s $$:
+
+$$
+  s(S)
+  = T(LR^jR^{-j}L^{-1})RL^j
+  = SR^{-j}L^{-1}RL^j
+  = S \begin{pmatrix} 2j+1 & 1 \\ -1 & 0 \end{pmatrix}
+$$
+
+Now we need to determine $$ j $$. If we were after the leading $$ R $$s we
+could take advantage of what we learnt from Euclid's algorithm above. With
+a clever manipulation of matrices we can still use it to get:
+
+> $$ S = \begin{pmatrix} n & n' \\ m & m' \end{pmatrix} \implies
+>    j = \left\lfloor \frac{n'+m'-1}{n+m} \right\rfloor  $$
+>
+> We can use the matrix transposition to reverse the path because
+> $$ (AB)^T = B^T A^T $$ for any matrix. Thus:
+>
+> $$ S^T = (PLR^j)^T = R^{Tj}L^TP^T $$
+>
+> Then:
+>
+> $$
+> R^T = L \text{ and } L^T = R \text{ by inspection}
+> $$
+>
+> $$
+> \implies S^T = L^jRP^T
+> $$
+>
+> $$
+> \implies
+> f(S^T) = f(L^jRP^T) = f\left(\begin{pmatrix} n & m \\ n' & m' \end{pmatrix}\right)
+> = \frac{n'+m'}{n+m}
+> $$
+>
+> Because $$ R $$ and $$ L $$ are transposes, $$ S^T $$ represents a valid path,
+> and thus $$ q = \frac{n'+m'}{n+m} $$ is a valid rational in the tree.
+> This allows us to determine $$ j $$ by finding the number of _leading_ $$ L $$s
+> in the path representation of $$ q $$.
+>
+> Given our algorithm above, this is the number of times we can subtract
+> $$ n+m $$ from $$ n'+m' $$ without reaching $$ 0 $$, thus:
+>
+> $$ j = \left\lfloor \frac{n'+m'-1}{n+m} \right\rfloor  $$
+
+Putting it all together we have:
+
+$$
+
+s(S) = s\left(\begin{pmatrix} n & n' \\ m & m' \end{pmatrix}\right)
+=
+\begin{cases}
+  \begin{pmatrix} 1 & m+2 \\ 0 & 1 \end{pmatrix}    & n' = 0   \\
+  S\begin{pmatrix} 2j+1 & 1 \\ -1 & 0 \end{pmatrix} & n' \ne 0 \\
+\end{cases}
+$$
+
+TODO: Demo
+
+We can now iterate over the rationals without having to run the Euclidean
+algorithm each time! However, we need to carry around extra state $$ S $$,
+because we can't recover the state directly from a given rational.
+
+Let's do better.
+
+# Calkin-Wilf Tree
+
+Given the path representation of a rational number, let's instead interpret the
+path in _reverse_. This new tree still contains all the rationals, but with the
+numbers permuted within each layer:
+
+This is the [Calkin-Wilf tree](https://en.wikipedia.org/wiki/Calkin%E2%80%93Wilf_tree).
+
+<div>
+  <canvas id='calkin-wilf-demo' width="500" height="400">
+    Your browser does not support canvas.
+  </canvas>
+</div>
+
+The most obvious difference is that the numbers are no longer in order.
+This is an unfortunate loss, but let's see what we get in return.
+
+First, how to we traverse the tree? To reverse the list, we will pre-multiply
+instead of post-multiply:
+
+$$
+  f(S)
+  = f\left(
+      \begin{pmatrix} n & n' \\ m & m' \end{pmatrix}
+    \right)
+  = \frac{m+m'}{n'+n}
+  = \frac{a}{b}
+$$
+
+$$
+  f(L^jS)
+  = f\left(
+      \begin{pmatrix} 1 & j \\ 0 & 1 \end{pmatrix}
+      \begin{pmatrix} n & n' \\ m & m' \end{pmatrix}
+    \right)
+  = \frac{m+m'}{n+jm+n'+jm'}
+  = \frac{a}{ja+b}
+$$
+
+$$
+  f(R^jS)
+  = f\left(
+      \begin{pmatrix} 1 & 0 \\ j & 1 \end{pmatrix}
+      \begin{pmatrix} n & n' \\ m & m' \end{pmatrix}
+    \right)
+  = \frac{jn+m+jn'+m'}{n+n'}
+  = \frac{a+jb}{b}
+$$
+
+Thus we get the remarkably simple result that the children of $$ \frac{a}{b} $$
+are $$ \frac{a}{a+b} $$ and $$ \frac{a+b}{b} $$.
+
+Now let's define the successor function as $$ s'(q) = s'(\frac{a}{b}) = s'(f(S)) $$.
+
+Once again, we will calculate $$ s' $$ in two parts:
+
+1. Detect when we are at the end of the layer, and move to the next one.
+2. Find the successor for a node in the same layer.
+
+(1) is simple. The outer nodes $$ L^j $$ and $$ R^j $$ are the same as in the
+Stern-Brocot tree, because the reversed path is the same. Hence it is sufficient
+to detect when $$ \frac{a}{b} $$ is an integer:
+$$ s'(q) = s'(\frac{a}{1}) = \frac{1}{q+1} $$.
+
+For (2), since the path is reversed, we want care about the prefix of the string.
+Otherwise the reasoning is the same as for the Stern-Brocot tree:
+
+$$
+  s'(f(S))
+   = s(f(R^jLT))
+   = f(L^jRT)
+$$
+
+Define $$ f(T) = \frac{c}{d} $$. We can easily compute the following:
+
+$$
+\begin{eqnarray}
+  f(LT)    &=& \frac{c}{c+d}        \\
+  f(RT)    &=& \frac{c+d}{d}        \\
+  f(R^jLT) &=& \frac{c+j(c+d)}{c+d} \\
+  f(L^jRT) &=& \frac{c+d}{j(c+d)+d} \\
+\end{eqnarray}
+$$
+
+We can now find the values of $$c, d \text{ and } j $$:
+
+$$ q = \frac{a}{b} = f(S) = \frac{c+j(c+d)}{c+d} $$
+
+$$
+\begin{eqnarray}
+  b &=& c+d \text{ and } a = c+j(c+d) \\
+  j &=& \frac{a-c}{c+d} = \frac{a}{b} - \frac{c}{c+d}
+        \implies
+        j = \left\lfloor j \right\rfloor
+          = \left\lfloor \frac{a}{b} \right\rfloor
+          = \lfloor q \rfloor \\
+  c &=& a-j(c+d) = a - \lfloor q \rfloor b \\
+  d &=& b - c = b - a + \lfloor q \rfloor b
+\end{eqnarray}
+$$
+
+This lets us determine $$ s'(q) $$ for case (2):
+
+$$
+
+\begin{eqnarray}
+  s'(q) &=& s'(L^jRT) = \frac{c+d}{j(c+d)+d} \\
+        &=& \frac{b}{jb+d} \\
+        &=& \frac{b}{\lfloor q \rfloor b + b - a + \lfloor q \rfloor b} \\
+        &=& \frac{b}{2 \lfloor q \rfloor b + b - a} \\
+        &=& \frac{1}{2 \lfloor q \rfloor + 1 - q} \\
+\end{eqnarray}
+
+$$
+
+Combining the two cases.
+
+$$
+  s'(q) =
+  \begin{cases}
+    \frac{1}{q+1}                         & b = 1\\
+    \frac{1}{2 \lfloor q \rfloor + 1 - q} & b \ne 1\\
+  \end{cases}
+$$
+
+However, we can combine the two cases because:
+$$
+  b = 1 \implies
+  q = \lfloor q \rfloor \implies
+  \frac{1}{q+1} = \frac{1}{2 \lfloor q \rfloor + 1 - q}
+$$
+
+Giving us a final, simple formula for iterating through the rationals:
+
+$$
+  s'(q) = \frac{1}{2 \lfloor q \rfloor + 1 - q}
+$$
+
+TODO: Hide long parts of the proof (both this section and previous).
+
+TODO: Demo
 
 # Sources
 
 Graham, Ronald L., Knuth, Donald E., & Patashnik, Oren. (1994). _Concrete
-mathematics: A foundation for computer science._ Second edn. Addison-Wesley.
+mathematics: A foundation for computer science_, Second edn. Addison-Wesley.
 
-Calkin, Neil; Wilf, Herbert (2000), "Recounting the rationals", _American
-Mathematical Monthly, Mathematical Association of America_
+Calkin, Neil; Wilf, Herbert (2000), _Recounting the rationals_, American
+Mathematical Monthly, Mathematical Association of America
+
+Roland Backhouse and J&otilde;ao Ferreira.
+_"Recounting the rationals" twice!_
+Proceedings of the 9th international conference on Mathematics of Program Construction,
+pages 79–91, 2008.
+
+Bruce Bates, Martin Bunder, Keith Tognetti.
+_Linking the Calkin–Wilf and Stern–Brocot trees_,
+European Journal of Combinatorics,
+Volume 31, Issue 7,
+2010,
+Pages 1637-1661,
+ISSN 0195-6698.
