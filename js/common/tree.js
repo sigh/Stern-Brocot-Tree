@@ -86,24 +86,18 @@ class CalkinWilfTree {
 }
 
 class NodeId {
-  constructor(rle, depth, index, hash) {
-    // Normalize.
-    if (rle.length == 0 || rle.length.length > 1 && rle[rle.length-1] == 0n) {
-      throw(rle);
-    }
-    // while (rle.length && rle[rle.length-1] == 0n) rle.pop();
-    // if (rle.length == 0) rle = [0n];
-
-    this._rle = rle
-    this._hash = hash || this.constructor._computeHash(this._rle);
+  constructor(rleint, depth) {
     this._depth = depth;
+    this._rleint = rleint;
+  }
 
-    this._index = index;
+  static fromRLEInteger(rleint, depth) {
+    return new NodeId(rleint, depth);
   }
 
   static fromIndex(depth, index) {
-    let rle = this._runLengthEncode(depth, index);
-    return new NodeId(rle, depth, index);
+    let rleint = RLEInteger.fromBigInt(index);
+    return NodeId.fromRLEInteger(rleint, depth);
   }
 
   static _normalizeRle(rle) {
@@ -115,6 +109,7 @@ class NodeId {
   static fromContinuedFraction(treeType, cf) {
     let rle = [];
 
+    // Copy up to maxDepth deep into the continued fraction.
     const maxDepth = 1n << 16n;
     let depth = 0n;
     for (let i = 0; i  < cf.length; i++) {
@@ -124,160 +119,87 @@ class NodeId {
       rle.push(cf[i]);
     }
 
+    // To get to the tree path, we need to decrement the last cf value by 1.
     rle[rle.length-1]--;
     depth--;
-    this._normalizeRle(rle);
 
+    let rleint = new RLEInteger(rle);
+    rleint.normalize();
+
+    // The Calkin-Wilf tree has the reverse path.
     if (treeType == 'calkin-wilf') {
-      if (rle.length%2 == 0) rle.push(0n);
-      rle.reverse();
-      this._normalizeRle(rle);
+      rleint.reverse(depth);
     }
 
-    return new NodeId(rle, depth);
-  }
-
-  static _computeHash(rle) {
-    let hash = 1n;
-    const m = 2075294099n;  // Random prime.
-    for (const v of rle) {
-      hash = ((hash+v)<<16n)%m
-    }
-    return hash;
-  }
-
-  static _runLengthEncode(depth, index) {
-    if (!depth) return [0n];
-
-    let currVal = 1;
-    let encoded = [0n];
-    let encodedPos = 0;
-
-    const str = index.toString(2).padStart(Number(depth), '0');
-    for (let i = 0; i < str.length; i++) {
-      if (str[i] != currVal) {
-        currVal = 1 - currVal;
-        encoded.push(0n);
-        encodedPos++;
-      }
-      encoded[encodedPos]++;
-    }
-    return encoded;
+    return NodeId.fromRLEInteger(rleint, depth);
   }
 
   toBigInt() {
-    return BigInt('0b' + this.toBase2());
+    return this._rleint.toBigInt();
   }
 
-  toRLE() {
-    return this._rle;
-  }
+  getPath() {
+    let rle = this._rleint.copyRLE();
 
-  toBase2() {
-    let parts = ['1'];
-    const CHARS = '01';
-    let cur = 1;
-    for (const v of this._rle) {
-      parts.push(CHARS[cur].repeat(Number(v)));
-      cur = 1-cur;
+    // Add leading left turns.
+    if (this._depth > this._rleint.size()) {
+      rle.unshift(0n, this._depth - this._rleint.size());
     }
-    return parts.join('');
+
+    return rle;
+  }
+
+  copyRLEInteger() {
+    return this._rleint.clone();
   }
 
   leftChild() {
-    let rle = this._rle.slice();
-    rle.length%2 ? rle.push(1n) : rle[rle.length-1]++;
-    return new NodeId(rle, this._depth+1n);
+    let rleint = this._rleint.clone();
+    rleint.appendBit(0, 1n);
+    return NodeId.fromRLEInteger(rleint, this._depth+1n);
   }
   rightChild() {
-    let rle = this._rle.slice();
-    rle.length%2 ? rle[rle.length-1]++ : rle.push(1n);
-    return new NodeId(rle, this._depth+1n);
+    let rleint = this._rleint.clone();
+    rleint.appendBit(1, 1n);
+    return NodeId.fromRLEInteger(rleint, this._depth+1n);
   }
   nthParent(n) {
-    let rle = this._rle.slice();
     const newDepth = this._depth-n;
-
-    // Handle the zero case, because it is an edge case.
     if (newDepth < 0n) throw('Negative depth');
-    if (newDepth === 0n) return new NodeId([0n], 0n);
 
-    while (n > 0) {
-      const lastValue = rle[rle.length-1]
-      if (lastValue <= n) {
-        n -= lastValue;
-        rle.pop();
-      } else {
-        rle[rle.length-1] -= n;
-        n = 0n;
-      }
-    }
+    let rleint = this._rleint.clone();
+    rleint.rightShift(n);
 
-    return new NodeId(rle, newDepth);
+    return NodeId.fromRLEInteger(rleint, newDepth);
   }
+  suffix(n) {
+    let rleint = this._rleint.suffix(n);
+    return NodeId.fromRLEInteger(rleint, n);
+  }
+
   next() {
-    let rle = this._rle.slice();
-
-    let len = rle.length;
-
-    // Remove all the Rs from the end, store the count in j.
-    let j = 0n;
-    if (len%2 == 1) {
-      j = rle.pop();
-      len--;
-    }
-
-    // Remove one L.
-    rle[len-1]--;
-
-    if (rle[len-1]) {
-      // If there are still Ls, then add an R at the back.
-      rle.push(1n);
-    } else {
-      // Otherwise, append the R to the existing list of Rs.
-      rle.pop();
-      len--;
-      rle[len-1] += 1n;
-    }
-
-    // Add j Ls (if they exist).
-    if (j) rle.push(j);
-
-    return new NodeId(rle, this._depth);
+    const nextRLEInt = RLEInteger.add(this._rleint, RLEInteger.ONE);
+    return NodeId.fromRLEInteger(nextRLEInt, this._depth);
   }
 
   isLastNode() {
-    return this._rle.length == 1;
+    // The result must be either 0 or all 1s.
+    return this._depth == this._rleint.numLeadingOnes();
   }
 
   depth() { return this._depth; }
   index() {
-    if (this._index === undefined) {
-      const rle = this._rle;
-
-      let isRight = true;
-      let index = 0n;
-      for (let j = 0; j < rle.length; j++) {
-        index <<= rle[j];
-        if (isRight) index |= (1n << rle[j])-1n;
-
-        isRight = !isRight;
-      }
-
-      this._index = index;
-    }
-
-    return this._index;
+    return this._rleint.toBigInt();
   }
 
-  hashEquals(other) {
-    return other && this._hash == other._hash;
-  }
   equals(other) {
-    if (!this.hashEquals(other)) return false;
+    return (other
+         && this._depth == other._depth
+         && 0 === RLEInteger.cmp(this._rleint, other._rleint));
+  }
 
-    return (this._rle.length == other._rle.length &&
-           this._rle.every((val, index) => val === other._rle[index]));
+  distanceTo(other) {
+    return RLEInteger.sub(this._rleint, other._rleint);
   }
 }
 
@@ -320,7 +242,7 @@ class TreeController extends BaseEventTarget {
     const nodeId = coord.obj;
 
     if (!nodeId && !this._hoverNodeId) return;
-    if (nodeId && nodeId.hashEquals(this._hoverNodeId)) return;
+    if (nodeId && nodeId.equals(this._hoverNodeId)) return;
     this._hoverNodeId = nodeId;
 
 
@@ -408,21 +330,21 @@ class TreeView {
 
   // Maximum number of nodes to explore from the cache values, if the
   // cache is not an exact hit.
-  static _MAX_CACHE_DELTA = 8n;
+  static _LOG_MAX_CACHE_DELTA = 3n;
 
   _lookupCache(nodeId, config) {
     let cache = {...this._cache};
 
     if (!cache.valid) return [];
 
-    const m = this.constructor._MAX_CACHE_DELTA;
+    const m = 1n << this.constructor._LOG_MAX_CACHE_DELTA;
     let diffD = nodeId.depth() - cache.nodeId.depth();
 
     if (diffD < 0) {
       // We are shallower than the cache.
       // Adjust cache to our depth - but don't go too far.
       const diffAdjustment = -diffD;
-      if (diffAdjustment > this.constructor._MAX_CACHE_DELTA) return [];
+      if (diffAdjustment > m) return [];
 
       for (let j = 0; j < diffAdjustment; j++) {
         this.counters.nodesTraversed++;
@@ -436,28 +358,28 @@ class TreeView {
     // Normalize I to the cache depth and find the appropriate bounds.
     const targetNodeId = nodeId.nthParent(diffD);
 
-    const targetI = targetNodeId.index();
+    // Check that we aren't too far from the cache.
+    const [distanceRLEI, dir] = targetNodeId.distanceTo(cache.nodeId);
+    if (distanceRLEI.size() > m) return [];
 
-    let cacheIndex = cache.nodeId.index();
-    if (targetI < cacheIndex-m || targetI > cacheIndex+m) {
-      return [];
+    // Find the target state by looking in the right direction.
+    const distance = distanceRLEI.toBigInt();
+    let state = cache.state;
+    if (dir > 0) {
+      for (let j = 0; j < distance; j++) {
+        this.counters.nodesTraversed++;
+        state = config.nextState(state);
+      }
+    }
+    if (dir < 0) {
+      for (let j = 0; j < distance; j++) {
+        this.counters.nodesTraversed++;
+        state = config.prevState(state);
+      }
     }
 
-    // Traverse left and right until we find the node.
-    while (cacheIndex > targetI) {
-      this.counters.nodesTraversed++;
-      cache.state = config.prevState(cache.state);
-      cacheIndex--;
-    }
-    while (cacheIndex < targetI) {
-      this.counters.nodesTraversed++;
-      cache.state = config.nextState(cache.state);
-      cacheIndex++;
-    }
-
-    const relativeIndex = nodeId.index() - (cacheIndex << diffD);
-    const relativeNodeId = NodeId.fromIndex(diffD, relativeIndex);
-    return [relativeNodeId, cache.state];
+    const relativeNodeId = nodeId.suffix(nodeId.depth()-targetNodeId.depth());
+    return [relativeNodeId, state];
   }
 
   // Find inital node at depth == minD starting at targetX.
@@ -474,7 +396,7 @@ class TreeView {
     }
 
     // Find the path to the node and follow it.
-    const path = relativeNodeId.toRLE();
+    const path = relativeNodeId.getPath();
     for (let j = 0; j < path.length; j++) {
       this.counters.mainLineNodes++;
 
@@ -506,9 +428,7 @@ class TreeView {
 
     // Determine if there is a selected node prefix to start matching on.
     let truncatedSelectedId = null;
-    let selectedBranches = '';
     if (selectedNodeId) {
-      selectedBranches = selectedNodeId.toBase2();
       const selectedNodeDepth = selectedNodeId.depth();
       if (selectedNodeDepth >= minD) {
         truncatedSelectedId = selectedNodeId.nthParent(selectedNodeDepth - minD);
@@ -525,9 +445,21 @@ class TreeView {
       let canvasXStart = this._renderer.canvasXStart(nodeId);
 
       while (canvasXStart < this._renderer.maxCanvasX()) {
-        const onSelectedBranch = nodeId.equals(truncatedSelectedId);
+        let revSelectedPath = false;
+        if (nodeId.equals(truncatedSelectedId)) {
+          // We are on a selected branch.
+
+          // Find the relative path from here to the selected node.
+          let relative = selectedNodeId.suffix(selectedNodeId.depth()-minD);
+          let path = relative.getPath();
+
+          // Reverse the path so that we can efficiently keep truncating it.
+          if (path.length%2==0) path.push(0n);
+          path.reverse();
+          revSelectedPath = path;
+        }
         stack.push([nodeId, canvasXStart, canvasY, nodeWidth,
-                    state, onSelectedBranch]);
+                    state, revSelectedPath]);
         this.counters.initialNodes++;
 
         if (nodeId.isLastNode()) break;
@@ -537,6 +469,9 @@ class TreeView {
         state = config.nextState(state);
       }
     }
+
+    // Check if we have anything to draw!
+    if (!stack.length) return;
 
     // Draw seed nodes.
     if (config.seedValues && minD == 0) {
@@ -556,19 +491,24 @@ class TreeView {
     const maxCanvasX = this._renderer.maxCanvasX();
     const maxCanvasY = this._renderer.maxCanvasY();
     while (stack.length) {
-      let [nodeId, canvasXStart, canvasY, nodeWidth, s, onSelectedBranch] = stack.pop();
+      let [nodeId, canvasXStart, canvasY, nodeWidth, s, revSelectedPath] = stack.pop();
       this.counters.nodesDrawn++;
 
       const [v, sL, sR] = config.node(s);
 
-      const d = nodeId.depth();
       let selectionType = Renderer.SELECT_NONE;
-      if (onSelectedBranch) {
-        if (d == selectedBranches.length-1) {
+      if (revSelectedPath !== false) {
+        let len = revSelectedPath.length;
+        while (revSelectedPath[len-1] === 0n) {
+          revSelectedPath.pop();
+          len--;
+        }
+        if (len == 0) {
           selectionType = Renderer.SELECT_FINAL;
-          onSelectedBranch = false;
+          revSelectedPath = false;
         } else {
-          selectionType = selectedBranches[d+1n] === '0' ? Renderer.SELECT_LEFT : Renderer.SELECT_RIGHT;
+          selectionType = len%2 ?  Renderer.SELECT_RIGHT : Renderer.SELECT_LEFT;
+          revSelectedPath[len-1]--;
         }
       }
 
@@ -579,10 +519,12 @@ class TreeView {
       if (nodeWidth >= Renderer.MIN_NODE_WIDTH && canvasY <= maxCanvasY) {
         const canvasXMid = canvasXStart+nodeWidth;
         if (canvasXMid >= 0) {
-          stack.push([nodeId.leftChild(),  canvasXStart, canvasY, nodeWidth, sL, selectionType === Renderer.SELECT_LEFT]);
+          stack.push([nodeId.leftChild(),  canvasXStart, canvasY, nodeWidth, sL,
+            selectionType === Renderer.SELECT_LEFT && revSelectedPath]);
         }
         if (canvasXMid < maxCanvasX) {
-          stack.push([nodeId.rightChild(), canvasXMid,   canvasY, nodeWidth, sR, selectionType === Renderer.SELECT_RIGHT]);
+          stack.push([nodeId.rightChild(), canvasXMid,   canvasY, nodeWidth, sR,
+            selectionType === Renderer.SELECT_RIGHT && revSelectedPath]);
         }
       }
     }

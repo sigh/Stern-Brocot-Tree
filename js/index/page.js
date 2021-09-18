@@ -9,6 +9,8 @@ class NodeInfoView {
   }
 
   _toContinuedFraction(rle,treeType) {
+    if (rle.length == 0) return [1];
+
     let cf = Array.from(rle);
 
     if (treeType == 'calkin-wilf') {
@@ -119,8 +121,8 @@ class NodeInfoView {
     this._clearContainer();
     if (!nodeId) return;
 
-    const rle = nodeId.toRLE();
-    const cf = this._toContinuedFraction(rle, treeType);
+    const path = nodeId.getPath();
+    const cf = this._toContinuedFraction(path, treeType);
     const f = MathHelpers.evalContinuedFrac(cf);
 
     let container = this._container;
@@ -134,7 +136,7 @@ class NodeInfoView {
     this._addItem(container, 'Index',
                   this._makeTextElem('div', nodeId.toBigInt()));
     this._addItem(container, 'Path',
-                  this._renderRLE(rle));
+                  this._renderRLE(path));
     this._addItem(container, 'Continued Fraction',
                   this._renderContinuedFraction(cf));
 
