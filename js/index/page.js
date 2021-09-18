@@ -163,10 +163,7 @@ const setUpDebug = (tree) => {
   let treeView = tree._tree;
 
   tree.addEventListener( 'update', () => {
-    debugDiv.textContent = `
-      ${treeView._hitboxes.size}/${treeView._nodesProcessed}
-      ${treeView._numDrawStarts}
-    `;
+    debugDiv.textContent = JSON.stringify(treeView.counters).replaceAll('"', '');
   });
 };
 

@@ -68,3 +68,63 @@ class BaseEventTarget {
     }
   }
 }
+
+class SimpleSpatialIndex {
+  static SLOT_MOD = (1<<8)-1;
+
+  constructor(width, height, bucketSize) {
+    this._bucketSize = bucketSize;
+    this._rows = Math.ceil(width/bucketSize);
+    this._cols = Math.ceil(height/bucketSize);
+    this._grid = new Uint8Array(this._rows*this._cols);
+    this._slots = new Array();
+  }
+
+  insert(obj, x, y, w, h) {
+    const b = this._bucketSize;
+    const rows = this._rows;
+    const cols = this._cols;
+
+    const minI = clamp(Math.floor(x/b),    0, rows);
+    const maxI = clamp(Math.ceil((x+w)/b), 0, rows);
+    const minJ = clamp(Math.floor(y/b),    0, cols);
+    const maxJ = clamp(Math.ceil((y+h)/b), 0, cols);
+
+    const slotNum = (this._slots.length % SimpleSpatialIndex.SLOT_MOD)+1;
+    this._slots.push([obj, x, y, x+w, y+h]);
+
+    for (let i = minI; i < maxI; i++) {
+      this._grid.fill(slotNum, i*cols + minJ, i*cols + maxJ);
+    }
+  }
+
+  _objInSlot(x, y, s) {
+    const [obj, x0, y0, x1, y1] = this._slots[s];
+
+    if (x >= x0 && y >= y0 && x < x1 && y < y1) return obj;
+    return undefined;
+  }
+
+  // Get the node at x,y (first match).
+  get(x, y) {
+    const b = this._bucketSize;
+
+    const i = Math.floor(x/b);
+    const j = Math.floor(y/b);
+
+    let slotNum = this._grid[i*this._cols+j];
+    if (!slotNum) return undefined;
+
+    slotNum -= 1;
+    for (let s = slotNum; s < this._slots.length; s += SimpleSpatialIndex.SLOT_MOD) {
+      const obj = this._objInSlot(x, y, s);
+      if (obj !== undefined) return obj;
+    }
+
+    return undefined;
+  }
+
+  size() {
+    return this._slots.length;
+  }
+}

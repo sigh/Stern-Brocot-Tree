@@ -103,12 +103,7 @@ class TreeController extends BaseEventTarget {
   }
 
   _updateSelection(coord) {
-    // Check if we are still in the same node.
-    if (this._hoverNodeId) {
-      if (this._tree.isInsideNodeId(coord, this._hoverNodeId)) return;
-    }
-
-    const nodeId = this._tree.findNodeIdAtCoord(coord);
+    const nodeId = coord.obj;
 
     if (this._hoverNodeId == nodeId) return;
     this._hoverNodeId = nodeId;
@@ -158,8 +153,6 @@ class TreeController extends BaseEventTarget {
 class TreeView {
   constructor(renderer) {
     this._renderer = renderer;
-    this._hitboxes = new Map();
-    this._nodesProcessed = 0;
 
     this._cache = {
       valid: false,
@@ -170,16 +163,17 @@ class TreeView {
       'stern-brocot': SternBrocotTree,
       'calkin-wilf': CalkinWilfTree,
     };
+
+    this._resetTree();
   }
 
   _resetTree() {
     this._renderer.resetCanvas();
-    this._hitboxes.clear();
-    this._nodesProcessed = 0;
-  }
-
-  _addNodeHitbox(nodeId, rect) {
-    this._hitboxes.set(nodeId, rect);
+    this.counters = {
+      nodesDrawn: 0,
+      nodesTraversed: 0,
+      initialNodes: 0,
+    }
   }
 
   draw(type, selectedNodeId) {
@@ -273,7 +267,7 @@ class TreeView {
     let initialNodes = [];
     while (stack.length) {
       let [iStart, iWidth, s] = stack.pop();
-      this._nodesProcessed++;
+      this.counters.nodesTraversed++;
 
       if (iWidth == 1n) {
         initialNodes.push([iStart, s]);
@@ -310,8 +304,8 @@ class TreeView {
     const [minX, maxX] = xRange;
 
     // Find all the initial drawing nodes.
-    let drawStarts = this._findInitialNodes(minD, expMinD, xRange, config);
-    this._numDrawStarts = drawStarts.length;
+    const initialNodes = this._findInitialNodes(minD, expMinD, xRange, config);
+    this.counters.initialNodes = initialNodes.length;
 
     // Determine if there is a selected node prefix to start matching on.
     const selectedBranches = selectedNodeId.toString(2);
@@ -325,8 +319,8 @@ class TreeView {
     // Set up the drawing stack.
     let stack = [];
     const nodeWidth = this._renderer.nodeWidth(minD);
-    for (let j = 0; j < drawStarts.length; j++) {
-      const [i, s] = drawStarts[j];
+    for (let j = 0; j < initialNodes.length; j++) {
+      const [i, s] = initialNodes[j];
 
       const canvasXStart = this._renderer.canvasXStart(minD, i);
       const canvasY = this._renderer.canvasY(minD, i);
@@ -355,7 +349,7 @@ class TreeView {
     const maxCanvasY = this._renderer.maxCanvasY();
     while (stack.length) {
       let [d, nodeId, canvasXStart, canvasY, nodeWidth, s, onSelectedBranch] = stack.pop();
-      this._nodesProcessed++;
+      this.counters.nodesDrawn++;
 
       const [v, sL, sR] = config.node(s);
 
@@ -369,8 +363,7 @@ class TreeView {
         }
       }
 
-      const rect = renderer.drawNode(canvasXStart, canvasY, nodeWidth, v, selectionType);
-      this._addNodeHitbox(nodeId, rect);
+      renderer.drawNode(nodeId, canvasXStart, canvasY, nodeWidth, v, selectionType);
 
       nodeId <<= 1n;
       d++;
@@ -386,39 +379,6 @@ class TreeView {
         }
       }
     }
-  }
-
-  isInsideNodeId(coord, nodeId) {
-    const rect = this._hitboxes.get(nodeId);
-    if (rect === undefined) return false;
-
-    return (coord.canvasX > rect[0] && coord.canvasY > rect[1]
-        && coord.canvasX < rect[0] + rect[2]
-        && coord.canvasY < rect[1] + rect[3]);
-  }
-
-  findNodeIdAtCoord(coord) {
-    const scale = coord.scale;
-
-    // Make sure we are within the tree.
-    if (coord.x <= 0n || coord.x >= scale || coord.y <= 0 || coord.y >= scale) {
-      return null;
-    }
-
-    // Find the depth.
-    const expD = scale/coord.y;
-    const d = MathHelpers.log2BigInt(expD);
-
-    // Find the index within the layer.
-    const i = (coord.x << d) / scale;
-
-    // Find the node.
-    const nodeId = i + (1n << d);
-
-    if (this.isInsideNodeId(coord, nodeId)) {
-      return nodeId;
-    }
-    return null;
   }
 
   // The inverse nodeId finds the eqivalent node in the other tree type.
@@ -472,6 +432,8 @@ class TreeView {
 }
 
 class Renderer {
+  static SPATIAL_INDEX_BUCKET_SIZE = 10;
+
   constructor(canvas, viewport) {
     this._canvas = canvas;
 
@@ -484,6 +446,8 @@ class Renderer {
     this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
     this._ctx.textAlign = 'center';
     this._ctx.textBaseline = 'middle';
+
+    this._viewport.resetSpatialIndex(Renderer.SPATIAL_INDEX_BUCKET_SIZE);
   };
 
   _drawBar(ctx, x, y, length, width) {
@@ -695,7 +659,7 @@ class Renderer {
 
   static MIN_NODE_WIDTH = 10;
 
-  drawNode(canvasXStart, canvasY, nodeWidth, frac, selectionType) {
+  drawNode(nodeId, canvasXStart, canvasY, nodeWidth, frac, selectionType) {
     const nodeHeight = nodeWidth*0.5;
     const canvasX = canvasXStart + nodeWidth/2;
 
@@ -714,7 +678,7 @@ class Renderer {
     }
     const rect = this._drawFraction(frac, canvasX, canvasY, nodeHeight, color);
 
-    return rect;
+    this._viewport.addToIndex(nodeId, ...rect);
   }
 
   drawSeedNode(xOffsetRatio, canvasXStart, canvasYMid, nodeWidth, v) {
@@ -764,6 +728,8 @@ class Viewport extends BaseEventTarget {
     this._setUpMouseClick(canvas);
 
     this._dragDistance = 0;
+
+    this._spatialIndex = null;
   }
 
   _setUpMouseClick(canvas) {
@@ -857,6 +823,10 @@ class Viewport extends BaseEventTarget {
     };
   }
 
+  _pixelScale() {
+    return this.SIZE / this._canvas.height;
+  }
+
   resetPosition() {
     this.scale = this.INITIAL_SCALE;
 
@@ -874,8 +844,17 @@ class Viewport extends BaseEventTarget {
     this._clampPosition();
   }
 
-  _pixelScale() {
-    return this.SIZE / this._canvas.height;
+  resetSpatialIndex(bucketSize) {
+    this._spatialIndex = new SimpleSpatialIndex(
+      this._canvas.width,
+      this._canvas.height,
+      bucketSize);
+  }
+
+  addToIndex(nodeId, x, y, w, h) {
+    if (this._spatialIndex) {
+      this._spatialIndex.insert(nodeId, x, y, w, h);
+    }
   }
 
   toCanvasX(x) {
@@ -914,11 +893,17 @@ class Viewport extends BaseEventTarget {
     const canvasY = clientY - canvasOrigin.y;
     const pixelScale = this._pixelScale();
 
+    let obj;
+    if (this._spatialIndex) {
+      obj = this._spatialIndex.get(canvasX, canvasY);
+    }
+
     return {x: this.origin.x + BigInt(Math.floor(pixelScale*canvasX)),
             y: this.origin.y - BigInt(Math.floor(pixelScale*canvasY)),
             canvasX: canvasX,
             canvasY: canvasY,
             scale: this.scale,
+            obj: obj,
            };
   }
 }
