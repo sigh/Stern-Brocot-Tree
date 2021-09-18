@@ -191,6 +191,8 @@ class TreeView {
     this._drawTree(selectedNodeId, config);
   }
 
+  // Maximum number of nodes to explore from the cache values, if the
+  // cache is not an exact hit.
   static _MAX_CACHE_DELTA = 8n;
 
   _lookupCache(minD, minI, maxI, config) {
@@ -198,42 +200,44 @@ class TreeView {
 
     const m = this.constructor._MAX_CACHE_DELTA;
     if (!cache.valid) return null;
-    if (minD < cache.minD-m) return null;
+    if (minD < cache.d-m) return null;
 
-    if (minD < cache.minD) {
+    if (minD < cache.d) {
       // We are shallower than the cache. Adjust cache to our depth.
       // For simplicity, only use one cache value so we don't have to deal
       // with duplicates.
       let node = cache.initialNodes[0];
-      const diffD = cache.minD - minD;
+      const diffD = cache.d - minD;
       for (let j = 0; j < diffD; j++) node[1] = config.parentState(node[1]);
       node[0] >>= diffD;
       cache.initialNodes = [node];
       cache.minI = node[0];
-      cache.maxI = node[0]+1n;
-      cache.minD = minD;
+      cache.d = minD;
     }
+
+    const cacheLen = BigInt(cache.initialNodes.length);
 
     // Cache depth is at our level or shallower.
     // Normalize I to the cache depth and find the appropriate bounds.
-    const diffD = minD - cache.minD;
+    const diffD = minD - cache.d;
     const targetMinI = minI >> diffD;
     const targetMaxI = ((maxI-1n) >> diffD) + 1n;
 
-    if (targetMinI < cache.minI-m || targetMaxI > cache.maxI+m) {
+    if (targetMinI < cache.minI-m || targetMaxI > cache.minI+cacheLen+m) {
       return null;
     }
 
     let stack = [];
     const iWidth = 1n << diffD;
+
+    // We rely on the nodes being in order.
     cache.initialNodes.sort((a,b) => a[0]<b[0] ? -1 : a[0] > b[0] ? 1 : 0);
 
     // Fill in all the nodes directly in the cache.
-    const cacheLen = cache.initialNodes.length;
     for (let j = 0; j < cacheLen; j++) {
-      const [iStart, s] = cache.initialNodes[j];
-      if (iStart >= targetMinI && iStart < targetMaxI) {
-        stack.push([iStart << diffD, iWidth, s]);
+      const [i, s] = cache.initialNodes[j];
+      if (i >= targetMinI && i < targetMaxI) {
+        stack.push([i << diffD, iWidth, s]);
       }
     }
     // Populate any values before the cache.
@@ -243,7 +247,7 @@ class TreeView {
       stack.push([i << diffD, iWidth, s]);
     }
     // Populate any values after the cache.
-    for (let i = cache.maxI, s = cache.initialNodes[cacheLen-1][1];
+    for (let i = cache.minI+cacheLen, s = cache.initialNodes[cacheLen-1n][1];
          i < targetMaxI; i++) {
       s = config.nextState(s);
       stack.push([i << diffD, iWidth, s]);
@@ -287,9 +291,8 @@ class TreeView {
 
     let cache = this._cache;
     cache.valid = true;
-    cache.minD = minD;
+    cache.d = minD;
     cache.minI = minI;
-    cache.maxI = maxI;
     cache.initialNodes = initialNodes;
 
     return initialNodes;
