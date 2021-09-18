@@ -178,8 +178,7 @@ class TreeView {
     this._nodesProcessed = 0;
   }
 
-  _addNodeHitbox(d, i, rect) {
-    const nodeId = i | (1n << d);
+  _addNodeHitbox(nodeId, rect) {
     this._hitboxes.set(nodeId, rect);
   }
 
@@ -305,7 +304,7 @@ class TreeView {
   _drawTree(selectedNodeId, config) {
     let renderer = this._renderer;
 
-    const [minD, maxD] = renderer.depthRange();
+    const minD = renderer.minDepth();
     const expMinD = 1n << minD;
     const xRange = renderer.xRange();
     const [minX, maxX] = xRange;
@@ -325,32 +324,37 @@ class TreeView {
 
     // Set up the drawing stack.
     let stack = [];
-    const layerWidth = this._renderer.layerWidth(minD);
+    const nodeWidth = this._renderer.nodeWidth(minD);
     for (let j = 0; j < drawStarts.length; j++) {
       const [i, s] = drawStarts[j];
 
-      // TODO: We can precompute all of these when finding iRange.
-      const xStart = this._renderer.xStart(minD, i);
+      const canvasXStart = this._renderer.canvasXStart(minD, i);
+      const canvasY = this._renderer.canvasY(minD, i);
       const onSelectedBranch = i == truncatedSelectedId;
 
-      stack.push([minD, i, xStart, layerWidth, s, onSelectedBranch]);
+      const nodeId = i + expMinD;
+      stack.push([minD, nodeId, canvasXStart, canvasY, nodeWidth, s, onSelectedBranch]);
     }
 
     // Draw seed nodes.
     if (config.seedValues && minD == 0) {
-      renderer.drawSeedNode(0, layerWidth, config.seedValues[0]);
-      renderer.drawSeedNode(1, layerWidth, config.seedValues[1]);
+      // At minD == 0, stack has exactly one element.
+      let [d, nodeId, canvasXStart, canvasY, nodeWidth, s, onSelectedBranch] = stack[0];
+      renderer.drawSeedNode(0, canvasXStart, canvasY, nodeWidth, config.seedValues[0]);
+      renderer.drawSeedNode(1, canvasXStart, canvasY, nodeWidth, config.seedValues[1]);
     }
 
     // Draw the tree branches for the top of the drawing stack.
     for (let j = 0; j < stack.length; j++) {
-      let [d, i, xStart, layerWidth, s, onSelectedBranch] = stack[j];
-      renderer.drawTreeBranches(xStart, layerWidth);
+      let [d, nodeIdi, canvasXStart, canvasY, nodeWidth, s, onSelectedBranch] = stack[j];
+      renderer.drawTreeBranches(canvasXStart, canvasY, nodeWidth);
     }
 
     // Draw nodes.
+    const maxCanvasX = this._renderer.maxCanvasX();
+    const maxCanvasY = this._renderer.maxCanvasY();
     while (stack.length) {
-      let [d, i, xStart, layerWidth, s, onSelectedBranch] = stack.pop();
+      let [d, nodeId, canvasXStart, canvasY, nodeWidth, s, onSelectedBranch] = stack.pop();
       this._nodesProcessed++;
 
       const [v, sL, sR] = config.node(s);
@@ -365,19 +369,20 @@ class TreeView {
         }
       }
 
-      const rect = renderer.drawNode(xStart, layerWidth, v, selectionType);
-      this._addNodeHitbox(d, i, rect);
+      const rect = renderer.drawNode(canvasXStart, canvasY, nodeWidth, v, selectionType);
+      this._addNodeHitbox(nodeId, rect);
 
-      i <<= 1n;
+      nodeId <<= 1n;
       d++;
-      layerWidth >>= 1n;
-      if (d < maxD) {
-        const xMid = xStart+layerWidth;
-        if (xMid >= minX) {
-          stack.push([d, i,    xStart, layerWidth, sL, selectionType === Renderer.SELECT_LEFT]);
+      nodeWidth *= 0.5;
+      canvasY += nodeWidth*0.75;
+      if (nodeWidth >= Renderer.MIN_NODE_WIDTH && canvasY <= maxCanvasY) {
+        const canvasXMid = canvasXStart+nodeWidth;
+        if (canvasXMid >= 0) {
+          stack.push([d, nodeId,    canvasXStart, canvasY, nodeWidth, sL, selectionType === Renderer.SELECT_LEFT]);
         }
-        if (xMid < maxX) {
-          stack.push([d, i+1n, xMid,   layerWidth, sR, selectionType === Renderer.SELECT_RIGHT]);
+        if (canvasXMid < maxCanvasX) {
+          stack.push([d, nodeId+1n, canvasXMid,   canvasY, nodeWidth, sR, selectionType === Renderer.SELECT_RIGHT]);
         }
       }
     }
@@ -553,40 +558,57 @@ class Renderer {
   // Keep drawing until the nodes are too small to see. We don't bother cropping
   // since this the main loop is size independant so should always be bounded
   // in time, assuming that layerWidth has already been constrained.
-  drawTreeBranches(xMin, layerWidth) {
-    const viewport = this._viewport;
-    const origin = viewport.origin;
-
-    const layerHeight = layerWidth >> 1n;
-    let nodeHeight = viewport.toCanvasY(layerHeight);
-
-    const x = xMin + layerHeight;
-    let canvasX = viewport.toCanvasX(x - origin.x);
-
-    const yMin = layerHeight;
-    const canvasYMin = viewport.toCanvasY(origin.y - yMin);
-    let canvasY = canvasYMin - nodeHeight*0.5;
+  drawTreeBranches(canvasXStart, canvasY, nodeWidth) {
+    let nodeHeight = nodeWidth*0.5;
+    let canvasX = canvasXStart + nodeWidth*0.5;
 
     let ctx = this._ctx;
     let n = 1;
     while (nodeHeight > 0.5 && canvasY) {
+      let canvasX = canvasXStart + nodeHeight;
       for (let j = 0; j < n; j++) {
-        this._drawBranch(ctx, canvasX+j*nodeHeight*2, canvasY, nodeHeight, -1);
-        this._drawBranch(ctx, canvasX+j*nodeHeight*2, canvasY, nodeHeight, 1);
+        this._drawBranch(ctx, canvasX, canvasY, nodeHeight, -1);
+        this._drawBranch(ctx, canvasX, canvasY, nodeHeight, 1);
+        canvasX += nodeWidth;
       }
       n <<= 1;
       canvasY += nodeHeight*0.75;
-      canvasX -= nodeHeight*0.5;
       nodeHeight *= 0.5;
+      nodeWidth *= 0.5;
     }
   }
 
-  layerWidth(d) {
-    return this._viewport.scale >> d;
+  nodeWidth(d) {
+    const layerWidth = this._viewport.scale >> d;
+    return this._viewport.toCanvasY(layerWidth);
   }
 
-  xStart(d, i) {
-    return (i * this._viewport.scale) >> d;
+  // Return the min x for a node in canvas coordinates.
+  canvasXStart(d, i) {
+    let viewport = this._viewport;
+
+    const x = (i * viewport.scale) >> d;
+    return viewport.toCanvasX(x - viewport.origin.x);
+  }
+
+  canvasY(d, i) {
+    let viewport = this._viewport;
+
+    const layerWidth = viewport.scale >> d;
+    const layerHeight = layerWidth >> 1n;
+    const nodeHeight = viewport.toCanvasY(layerHeight);
+
+    const yMin = layerHeight;
+    const canvasYMin = viewport.toCanvasY(viewport.origin.y - yMin);
+
+    return canvasYMin - nodeHeight*0.5;
+  }
+
+  maxCanvasX() {
+    return this._canvas.width;
+  }
+  maxCanvasY() {
+    return this._canvas.height;
   }
 
   centeredNodePosition(d, i) {
@@ -625,9 +647,8 @@ class Renderer {
   static _SELECTED_COLOR = '#0099ff';
   static _SEED_COLOR = 'grey'
 
-  // The range of depths visible in the current viewport.
-  // Returns the half-open interval [minD, maxD).
-  depthRange() {
+  // The mininmum depth visible in the viewport.
+  minDepth() {
     const viewport = this._viewport;
     const scale = viewport.scale;
     const origin = viewport.origin;
@@ -636,20 +657,7 @@ class Renderer {
     let minD = MathHelpers.log2BigInt(scale/origin.y) - 1n;
     if (minD < 0) minD = 0n;
 
-    // Exclude nodes which are too small.
-    const minNodeHeight = 5;
-    const minLayerHeight = viewport.fromCanvasY(minNodeHeight);
-    let maxD = MathHelpers.log2BigInt(scale/minLayerHeight) + 1n;
-
-    // Exclude nodes which are below the viewport.
-    // If targetYCoord  <= 0, then the whole tree is visible.
-    const targetYMin = origin.y - viewport.fromCanvasY(this._canvas.height);
-    if (targetYMin > 0) {
-      const maxViewportD = MathHelpers.log2BigInt(scale/targetYMin) + 1n;
-      if (maxViewportD < maxD) maxD = maxViewportD;
-    }
-
-    return [minD, maxD];
+    return minD;
   }
 
   // Returns the range of x coordinates of the viewport at the current scale.
@@ -685,24 +693,15 @@ class Renderer {
     return this._viewport.scale;
   }
 
-  drawNode(xMin, layerWidth, frac, selectionType) {
-    const viewport = this._viewport;
-    const origin = viewport.origin;
+  static MIN_NODE_WIDTH = 10;
 
-    const layerHeight = layerWidth >> 1n;
-
-    const yMin = layerHeight;
-    const nodeHeight = viewport.toCanvasY(layerHeight);
-
-    const x = xMin + layerHeight;
-    const canvasX = viewport.toCanvasX(x - origin.x);
-
-    const canvasYMin = viewport.toCanvasY(origin.y - yMin);
-    const canvasYMid = canvasYMin - nodeHeight*0.5;
+  drawNode(canvasXStart, canvasY, nodeWidth, frac, selectionType) {
+    const nodeHeight = nodeWidth*0.5;
+    const canvasX = canvasXStart + nodeWidth/2;
 
     // Draw the selected branch.
     if (selectionType > Renderer.SELECT_FINAL) {
-      this._drawBranch(this._ctx, canvasX, canvasYMid, nodeHeight,
+      this._drawBranch(this._ctx, canvasX, canvasY, nodeHeight,
                        selectionType == Renderer.SELECT_LEFT ? -1 : 1,
                        Renderer._PATH_COLOR);
     }
@@ -713,30 +712,17 @@ class Renderer {
       color = selectionType === Renderer.SELECT_FINAL
         ? Renderer._SELECTED_COLOR : Renderer._PATH_COLOR;
     }
-    const rect = this._drawFraction(frac, canvasX, canvasYMid, nodeHeight, color);
+    const rect = this._drawFraction(frac, canvasX, canvasY, nodeHeight, color);
 
     return rect;
   }
 
-  drawSeedNode(xOffsetRatio, layerWidth, v) {
-    const viewport = this._viewport;
-    const scale = viewport.scale;
-    const origin = viewport.origin;
+  drawSeedNode(xOffsetRatio, canvasXStart, canvasYMid, nodeWidth, v) {
+    const canvasXMid = canvasXStart + nodeWidth*0.5;
+    const canvasX = canvasXStart + nodeWidth*xOffsetRatio;
 
-    const layerHeight = layerWidth >> 1n;
-
-    const yMin = layerHeight;
-    const nodeHeight = viewport.toCanvasY(layerHeight);
-
-    const x = layerWidth * BigInt(Math.floor(xOffsetRatio*(1<<5))) >> 5n;
-    const canvasX = viewport.toCanvasX(x - origin.x);
-
-    const xMid = layerHeight;
-    const canvasXMid = viewport.toCanvasX(xMid - origin.x);
-
-    const canvasYMin = viewport.toCanvasY(origin.y - yMin);
-    const canvasYMid = canvasYMin - nodeHeight*0.5;
-    const canvasYSeed = canvasYMin - nodeHeight*0.6;
+    const nodeHeight = nodeWidth*0.5;
+    const canvasYSeed = canvasYMid - nodeHeight*0.1;
 
     let ctx = this._ctx;
 
