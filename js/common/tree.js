@@ -8,6 +8,17 @@ class SternBrocotTree {
     return [v, [s[0], v], [v, s[1]]];
   }
 
+  // Go left n times.
+  static nthLeftChild(s, n) {
+    const c = [s[0][0]*n + s[1][0], s[0][1]*n + s[1][1]];
+    return [s[0], c];
+  }
+  // Go right n times.
+  static nthRightChild(s, n) {
+    const c = [s[0][0] + s[1][0]*n, s[0][1] + s[1][1]*n];
+    return [c, s[1]];
+  }
+
   static parentState(s) {
     const [s0, s1] = s;
     if (s0[0]+s0[1] < s1[0]+s1[1]) {
@@ -44,6 +55,13 @@ class CalkinWilfTree {
     return [s, [s[0], m], [m, s[1]]]
   }
 
+  static nthLeftChild(s, n) {
+    return [s[0], s[0]*n+s[1]];
+  }
+  static nthRightChild(s, n) {
+    return [s[0]+s[1]*n, s[1]];
+  }
+
   static parentState(s) {
     if (s[0] < s[1]) {
       // We are the left branch.
@@ -64,6 +82,68 @@ class CalkinWilfTree {
     const j = s[1]/s[0]
     const k = (j<<1n)+1n
     return [k*s[0]-s[1], s[0]]
+  }
+}
+
+class NodeId {
+  constructor(depth, index, rle) {
+    this._depth = depth;
+    this._index = index;
+    this._rle = rle
+  }
+
+  _runLengthEncode() {
+    let currVal = 1;
+    let encoded = [0n];
+    let encodedPos = 0;
+
+    const str = this.toBase2();
+    for (let i = 1; i < str.length; i++) {
+      if (str[i] != currVal) {
+        currVal = 1 - currVal;
+        encoded.push(0n);
+        encodedPos++;
+      }
+      encoded[encodedPos]++;
+    }
+    return encoded;
+  }
+
+  toRLE() {
+    if (this._rle === undefined) {
+      this._rle = this._runLengthEncode();
+    }
+    return this._rle;
+  }
+
+  toBigInt() {
+    return this._index | (1n << this._depth);
+  }
+
+  toBase2() {
+    if (!this._depth) return '1';
+    return '1' + this._index.toString(2).padStart(Number(this._depth), '0');
+  }
+
+  leftChild() {
+    return new NodeId(this._depth+1n, this._index << 1n);
+  }
+  rightChild() {
+    return new NodeId(this._depth+1n, (this._index << 1n) + 1n);
+  }
+
+  inverse() {
+    const nodeIdChars = [...this._index.toString(2)];
+    nodeIdChars.reverse();
+
+    return new NodeId(this._depth, BigInt('0b' + nodeIdChars.join('')));
+  }
+
+  depth() { return this._depth; }
+  index() { return this._index; }
+
+  equals(other) {
+    return other && this._depth == other._depth && this._index == other._index;
   }
 }
 
@@ -105,8 +185,10 @@ class TreeController extends BaseEventTarget {
   _updateSelection(coord) {
     const nodeId = coord.obj;
 
-    if (this._hoverNodeId == nodeId) return;
+    if (!nodeId && !this._hoverNodeId) return;
+    if (nodeId && nodeId.equals(this._hoverNodeId)) return;
     this._hoverNodeId = nodeId;
+
 
     this._canvas.style.cursor = nodeId ? 'pointer' : 'grab'
     this._update();
@@ -172,14 +254,13 @@ class TreeView {
     this.counters = {
       nodesDrawn: 0,
       nodesTraversed: 0,
+      mainLineNodes: 0,
       initialNodes: 0,
     }
   }
 
   draw(type, selectedNodeId) {
     this._resetTree();
-
-    selectedNodeId = selectedNodeId || 0n;
 
     const config = this._treeConfigs[type];
 
@@ -188,114 +269,89 @@ class TreeView {
       this._cache.treeType = type;
     }
 
-    this._drawTree(selectedNodeId, config);
+    this._drawTree(selectedNodeId || 0n, config);
   }
 
   // Maximum number of nodes to explore from the cache values, if the
   // cache is not an exact hit.
   static _MAX_CACHE_DELTA = 8n;
 
-  _lookupCache(minD, minI, maxI, config) {
-    let cache = this._cache;
+  _lookupCache(depth, index, config) {
+    let cache = {...this._cache};
 
     const m = this.constructor._MAX_CACHE_DELTA;
-    if (!cache.valid) return null;
-    if (minD < cache.d-m) return null;
+    if (!cache.valid) return [];
+    if (depth < cache.depth-m) return [];
 
-    if (minD < cache.d) {
+    if (depth < cache.depth) {
       // We are shallower than the cache. Adjust cache to our depth.
-      // For simplicity, only use one cache value so we don't have to deal
-      // with duplicates.
-      let node = cache.initialNodes[0];
-      const diffD = cache.d - minD;
-      for (let j = 0; j < diffD; j++) node[1] = config.parentState(node[1]);
-      node[0] >>= diffD;
-      cache.initialNodes = [node];
-      cache.minI = node[0];
-      cache.d = minD;
+      const diffD = cache.depth - depth;
+      for (let j = 0; j < diffD; j++) {
+        this.counters.nodesTraversed++;
+        cache.state = config.parentState(cache.state);
+      }
+      cache.index >>= diffD;
+      cache.depth = depth;
     }
-
-    const cacheLen = BigInt(cache.initialNodes.length);
 
     // Cache depth is at our level or shallower.
     // Normalize I to the cache depth and find the appropriate bounds.
-    const diffD = minD - cache.d;
-    const targetMinI = minI >> diffD;
-    const targetMaxI = ((maxI-1n) >> diffD) + 1n;
+    const diffD = depth - cache.depth;
+    const targetI = index >> diffD;
 
-    if (targetMinI < cache.minI-m || targetMaxI > cache.minI+cacheLen+m) {
-      return null;
+    if (targetI < cache.index-m || targetI > cache.index+m) {
+      return [];
     }
 
-    let stack = [];
-    const iWidth = 1n << diffD;
-
-    // We rely on the nodes being in order.
-    cache.initialNodes.sort((a,b) => a[0]<b[0] ? -1 : a[0] > b[0] ? 1 : 0);
-
-    // Fill in all the nodes directly in the cache.
-    for (let j = 0; j < cacheLen; j++) {
-      const [i, s] = cache.initialNodes[j];
-      if (i >= targetMinI && i < targetMaxI) {
-        stack.push([i << diffD, iWidth, s]);
-      }
+    // Traverse left and right until we find the node.
+    while (cache.index > targetI) {
+      this.counters.nodesTraversed++;
+      cache.state = config.prevState(cache.state);
+      cache.index--;
     }
-    // Populate any values before the cache.
-    for (let i = cache.minI-1n, s = cache.initialNodes[0][1];
-         i >= targetMinI; i--) {
-      s = config.prevState(s);
-      stack.push([i << diffD, iWidth, s]);
-    }
-    // Populate any values after the cache.
-    for (let i = cache.minI+cacheLen, s = cache.initialNodes[cacheLen-1n][1];
-         i < targetMaxI; i++) {
-      s = config.nextState(s);
-      stack.push([i << diffD, iWidth, s]);
+    while (cache.index < targetI) {
+      this.counters.nodesTraversed++;
+      cache.state = config.nextState(cache.state);
+      cache.index++;
     }
 
-    return stack;
+    const relativeIndex = index - (cache.index << diffD);
+    const relativeNodeId = new NodeId(diffD, relativeIndex);
+    return [relativeNodeId, cache.state];
   }
 
-  // Find all nodes where depth == minD.
-  // The final positions don't depend on the viewport so can be cached.
-  _findInitialNodes(minD, expMinD, xRange, config) {
-    const [minI, maxI] = this._renderer.iRange(minD, expMinD, xRange);
+  // Find inital node at depth == minD starting at targetX.
+  _findInitialNode(depth, expMinD, x, config) {
+    const targetI = this._renderer.indexAtX(depth, expMinD, x);
 
-    let stack = this._lookupCache(minD, minI, maxI, config);
+    let [relativeNodeId, state] = this._lookupCache(depth, targetI, config);
 
     // We didn't populate from the cache, so we have to start from the start.
-    if (stack === null) {
-      stack = [[0n, expMinD, config.initState]];
+    if (relativeNodeId === undefined) {
+      relativeNodeId = new NodeId(depth, targetI);
+      state = config.initState;
     }
 
-    let initialNodes = [];
-    while (stack.length) {
-      let [iStart, iWidth, s] = stack.pop();
-      this.counters.nodesTraversed++;
+    // Find the path to the node and follow it.
+    const path = relativeNodeId.toRLE();
+    for (let j = 0; j < path.length; j++) {
+      this.counters.mainLineNodes++;
 
-      if (iWidth == 1n) {
-        initialNodes.push([iStart, s]);
+      if (j%2) {
+        state = config.nthLeftChild(state, path[j]);
       } else {
-        iWidth >>= 1n;
-        const iMid = iStart + iWidth;
-        const [_, sL, sR] = config.node(s);
-
-        if (iMid >= minI) {
-          stack.push([iStart, iWidth, sL]);
-        }
-        if (iMid < maxI) {
-          stack.push([iMid, iWidth, sR]);
-        }
+        state = config.nthRightChild(state, path[j]);
       }
     }
 
+    // Repopulate the cache.
     let cache = this._cache;
     cache.valid = true;
-    cache.d = minD;
-    cache.minI = minI;
-    cache.initialNodes = initialNodes;
+    cache.depth = depth;
+    cache.index = targetI;
+    cache.state = state;
 
-    return initialNodes;
+    return [targetI, state];
   }
 
   _drawTree(selectedNodeId, config) {
@@ -303,47 +359,56 @@ class TreeView {
 
     const minD = renderer.minDepth();
     const expMinD = 1n << minD;
-    const xRange = renderer.xRange();
-    const [minX, maxX] = xRange;
 
     // Find all the initial drawing nodes.
-    const initialNodes = this._findInitialNodes(minD, expMinD, xRange, config);
-    this.counters.initialNodes = initialNodes.length;
+    const initialNode = this._findInitialNode(
+      minD, expMinD, renderer.minX(), config);
 
     // Determine if there is a selected node prefix to start matching on.
-    const selectedBranches = selectedNodeId.toString(2);
-    const selectedNodeDepth = selectedBranches.length-1;
     let truncatedSelectedId = -1n;
-    if (selectedNodeDepth >= minD) {
-      truncatedSelectedId = selectedNodeId >> (BigInt(selectedNodeDepth) - minD);
-      truncatedSelectedId -= expMinD;
+    let selectedBranches = '';
+    if (selectedNodeId) {
+      selectedBranches = selectedNodeId.toBase2();
+      const selectedNodeDepth = selectedNodeId.depth();
+      if (selectedNodeDepth >= minD) {
+        truncatedSelectedId = selectedNodeId.index() >> (selectedNodeDepth - minD);
+      }
     }
 
     // Set up the drawing stack.
     let stack = [];
-    const nodeWidth = this._renderer.nodeWidth(minD);
-    for (let j = 0; j < initialNodes.length; j++) {
-      const [i, s] = initialNodes[j];
+    {
+      const nodeWidth = this._renderer.nodeWidth(minD);
+      const canvasY = this._renderer.canvasY(minD);
 
-      const canvasXStart = this._renderer.canvasXStart(minD, i);
-      const canvasY = this._renderer.canvasY(minD, i);
-      const onSelectedBranch = i == truncatedSelectedId;
+      let [index, state] = initialNode;
+      let canvasXStart = this._renderer.canvasXStart(minD, index);
 
-      const nodeId = i + expMinD;
-      stack.push([minD, nodeId, canvasXStart, canvasY, nodeWidth, s, onSelectedBranch]);
+      while (canvasXStart < this._renderer.maxCanvasX()) {
+        const onSelectedBranch = index == truncatedSelectedId;
+        const nodeId = new NodeId(minD, index);
+        stack.push([minD, nodeId, canvasXStart, canvasY, nodeWidth,
+                    state, onSelectedBranch]);
+        this.counters.initialNodes++;
+
+        index++;
+        if (index == expMinD) break;
+        canvasXStart += nodeWidth;
+        state = config.nextState(state);
+      }
     }
 
     // Draw seed nodes.
     if (config.seedValues && minD == 0) {
       // At minD == 0, stack has exactly one element.
-      let [d, nodeId, canvasXStart, canvasY, nodeWidth, s, onSelectedBranch] = stack[0];
+      const [d, nodeId, canvasXStart, canvasY, nodeWidth, s, onSelectedBranch] = stack[0];
       renderer.drawSeedNode(0, canvasXStart, canvasY, nodeWidth, config.seedValues[0]);
       renderer.drawSeedNode(1, canvasXStart, canvasY, nodeWidth, config.seedValues[1]);
     }
 
     // Draw the tree branches for the top of the drawing stack.
     for (let j = 0; j < stack.length; j++) {
-      let [d, nodeIdi, canvasXStart, canvasY, nodeWidth, s, onSelectedBranch] = stack[j];
+      const [d, nodeId, canvasXStart, canvasY, nodeWidth, s, onSelectedBranch] = stack[j];
       renderer.drawTreeBranches(canvasXStart, canvasY, nodeWidth);
     }
 
@@ -368,31 +433,19 @@ class TreeView {
 
       renderer.drawNode(nodeId, canvasXStart, canvasY, nodeWidth, v, selectionType);
 
-      nodeId <<= 1n;
       d++;
       nodeWidth *= 0.5;
       canvasY += nodeWidth*0.75;
       if (nodeWidth >= Renderer.MIN_NODE_WIDTH && canvasY <= maxCanvasY) {
         const canvasXMid = canvasXStart+nodeWidth;
         if (canvasXMid >= 0) {
-          stack.push([d, nodeId,    canvasXStart, canvasY, nodeWidth, sL, selectionType === Renderer.SELECT_LEFT]);
+          stack.push([d, nodeId.leftChild(),  canvasXStart, canvasY, nodeWidth, sL, selectionType === Renderer.SELECT_LEFT]);
         }
         if (canvasXMid < maxCanvasX) {
-          stack.push([d, nodeId+1n, canvasXMid,   canvasY, nodeWidth, sR, selectionType === Renderer.SELECT_RIGHT]);
+          stack.push([d, nodeId.rightChild(), canvasXMid,   canvasY, nodeWidth, sR, selectionType === Renderer.SELECT_RIGHT]);
         }
       }
     }
-  }
-
-  // The inverse nodeId finds the eqivalent node in the other tree type.
-  inverseNodeId(nodeId) {
-    let nodeIdChars = [...nodeId.toString(2)];
-
-    // Reverse and remove the old leading '1'.
-    nodeIdChars.reverse();
-    nodeIdChars.pop();
-
-    return BigInt('0b1' + nodeIdChars.join(''));
   }
 
   nodeForContinuedFraction(treeType, cf) {
@@ -400,7 +453,7 @@ class TreeView {
 
     let isRight = true;
     let d = 0n;
-    const maxD = 1n << 18n;
+    const maxD = 1n << 20n;
     for (let i = 0; i < cf.length; i++) {
       if (maxD - d < cf[i]) {
         break;
@@ -416,14 +469,14 @@ class TreeView {
     // Reduce last cf entry by 1.
     d--;
     nodeIndex >>= 1n;
-    let nodeId = nodeIndex | (1n << d);
+    let nodeId = new NodeId(d, nodeIndex);
 
     if (treeType == 'calkin-wilf') {
-      nodeId = this.inverseNodeId(nodeId);
-      nodeIndex = nodeId ^ (1n << d);
+      nodeId = nodeId.inverse();
+      nodeIndex = nodeId.index();
     }
 
-    const pos = this._renderer.centeredNodePosition(d, nodeIndex);
+    const pos = this._renderer.centeredNodePosition(nodeId);
 
     return {
       nodeId: nodeId,
@@ -558,7 +611,7 @@ class Renderer {
     return viewport.toCanvasX(x - viewport.origin.x);
   }
 
-  canvasY(d, i) {
+  canvasY(d) {
     let viewport = this._viewport;
 
     const layerWidth = viewport.scale >> d;
@@ -578,8 +631,9 @@ class Renderer {
     return this._canvas.height;
   }
 
-  centeredNodePosition(d, i) {
+  centeredNodePosition(nodeId) {
     const viewport = this._viewport;
+    const d = nodeId.depth();
 
     // Determine what our target size is, but we may have to adjust if the
     // scale is too small.
@@ -590,7 +644,7 @@ class Renderer {
 
     const layerHeight = scale >> (d+1n);
 
-    const xMid = ((i * scale) >> d) + layerHeight;
+    const xMid = ((nodeId.index() * scale) >> d) + layerHeight;
     const yMid = layerHeight + layerHeight/2n;
 
     const screenMidY = viewport.fromCanvasY(this._canvas.height/2);
@@ -627,33 +681,20 @@ class Renderer {
     return minD;
   }
 
-  // Returns the range of x coordinates of the viewport at the current scale.
-  xRange() {
-    const viewport = this._viewport;
-    const origin = viewport.origin;
-
-    return [origin.x, viewport.fromCanvasX(this._canvas.width) + origin.x];
+  minX() {
+    return this._viewport.origin.x;
   }
 
-  // Range of i values visible in xRange at depth d.
-  // Returns the half-open interval [iMin, iMax).
-  // The returned range will always be valid indexes (possible empty).
-  iRange(d, expD, xRange) {
-    const [xMin, xMax] = xRange;
+  // Returns the index for the node closest to x.
+  // Index will always be valid, even outside the tree.
+  indexAtX(d, expD, x) {
     const scale = this._viewport.scale;
 
-    let iMin = (xMin<<d)/scale;
-    if (iMin < 0) iMin = 0n;
+    let index = (x<<d)/scale;
+    if (index < 0) index = 0n;
+    if (index >= expD) index = expD-1n;
 
-    let iMax = (xMax<<d)/scale + 1n;
-    if (iMax > expD) iMax = expD;
-
-    if (iMin >= iMax) {
-      iMin = 0;
-      iMax = 0;
-    }
-
-    return [iMin, iMax];
+    return index;
   }
 
   initialLayerWidth() {

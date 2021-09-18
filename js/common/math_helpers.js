@@ -67,8 +67,7 @@ class MathHelpers {
   }
 
   static log2BigInt(n) {
+    // Note: can be faster with base-16 but code is more complicated.
     return BigInt(n.toString(2).length - 1);
   }
 }
-
-

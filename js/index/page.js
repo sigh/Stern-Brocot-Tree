@@ -8,21 +8,6 @@ class NodeInfoView {
     });
   }
 
-  _runLengthEncode(nodeIdStr) {
-    let currVal = 1;
-    let encoded = [0];
-    let encodedPos = 0;
-    for (let i = 1; i < nodeIdStr.length; i++) {
-      if (nodeIdStr[i] != currVal) {
-        currVal = 1 - currVal;
-        encoded.push(0);
-        encodedPos++;
-      }
-      encoded[encodedPos]++;
-    }
-    return encoded;
-  }
-
   _toContinuedFraction(rle,treeType) {
     let cf = Array.from(rle);
 
@@ -134,8 +119,7 @@ class NodeInfoView {
     this._clearContainer();
     if (!nodeId) return;
 
-    const nodeIdStr = nodeId.toString(2);
-    const rle = this._runLengthEncode(nodeIdStr);
+    const rle = nodeId.toRLE();
     const cf = this._toContinuedFraction(rle, treeType);
     const f = MathHelpers.evalContinuedFrac(cf);
 
@@ -146,9 +130,9 @@ class NodeInfoView {
     this._addItem(container, 'Decimal',
                   this._makeTextElem('div', MathHelpers.fracToDecimal(...f)));
     this._addItem(container, 'Depth',
-                  this._makeTextElem('div', nodeIdStr.length-1));
+                  this._makeTextElem('div', nodeId.depth()));
     this._addItem(container, 'Index',
-                  this._makeTextElem('div', nodeId));
+                  this._makeTextElem('div', nodeId.toBigInt()));
     this._addItem(container, 'Path',
                   this._renderRLE(rle));
     this._addItem(container, 'Continued Fraction',
