@@ -193,10 +193,12 @@ const setUpControlPanel = (tree) => {
   };
 };
 
+let tree;
+
 const initPage = () => {
   let canvas = document.getElementById('tree-vis');
 
-  let tree = new TreeController(canvas);
+  tree = new TreeController(canvas);
 
   let nodeInfoView = new NodeInfoView(tree);
 
