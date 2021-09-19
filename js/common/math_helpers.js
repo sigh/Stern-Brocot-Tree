@@ -129,21 +129,20 @@ class RLEInteger {
     if (!n) return new RLEInteger();
     if (n < 0) throw('RLEInteger must be positive.');
 
-    let isOne = true;
-    let rle = [0n];
-    let pos = 0;
-
     const str = n.toString(2);
-    for (let i = 0; i < str.length; i++) {
-      if ((str[i] === '1') === isOne) {
-        rle[pos]++;
-      } else {
-        isOne = !isOne;
-        rle.push(1n);
-        pos++;
-      }
+    const strLen = str.length;
+
+    let rle = [];
+    let i = 0;
+    let curChar = '1';
+    while (i < strLen) {
+      const startI = i;
+      while (str[i] === curChar) i++;
+      rle.push(BigInt(i-startI));
+
+      curChar = str[i];
     }
-    return new RLEInteger(rle, BigInt(str.length), n);
+    return new RLEInteger(rle, BigInt(strLen), n);
   }
 
   toBigInt() {
