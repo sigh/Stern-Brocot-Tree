@@ -110,7 +110,7 @@ class NodeId {
     let rle = [];
 
     // Copy up to maxDepth deep into the continued fraction.
-    const maxDepth = 1n << 16n;
+    const maxDepth = 1n << 20n;
     let depth = 0n;
     for (let i = 0; i  < cf.length; i++) {
       if (depth + cf[i] > maxDepth) break;
@@ -134,10 +134,6 @@ class NodeId {
     return NodeId.fromRLEInteger(rleint, depth);
   }
 
-  toBigInt() {
-    return this._rleint.toBigInt();
-  }
-
   getPath() {
     let rle = this._rleint.copyRLE();
 
@@ -149,8 +145,8 @@ class NodeId {
     return rle;
   }
 
-  copyRLEInteger() {
-    return this._rleint.clone();
+  getRLEInteger() {
+    return this._rleint;
   }
 
   leftChild() {

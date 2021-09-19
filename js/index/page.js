@@ -117,6 +117,49 @@ class NodeInfoView {
     }
   }
 
+  _renderIndex(nodeId) {
+    let div = document.createElement('div');
+    let rleint = nodeId.getRLEInteger().clone();;
+
+    if (nodeId.depth() < 64) {
+      const index = rleint.toBigInt() | (1n << nodeId.depth());
+      div.append(this._makeTextElem('div', index));
+    }
+    if (nodeId.depth() >= 20) {
+      // Ignore all but the first 64 bits of the index.
+      const workingPrecision = 64n;
+      let shift = nodeId.depth() - workingPrecision;
+      if (shift < 0) shift = 0n;
+      rleint.rightShift(shift);
+
+      // index = a * 2**shift + 2**depth.
+      //       = 2**shift * (a + 2**(depth-shift))
+      const a = rleint.toBigInt();
+
+      // index = 2**shift * b
+      const b = Number(a) + Math.pow(2, Number(nodeId.depth() - shift));
+
+      // index = 10**si * 10**sf * b
+      const s = Number(shift) * Math.log10(2);
+      const si = Math.floor(s);
+      const sf = s%1;
+
+      // index = 10**si * c
+      const c = Math.pow(10, sf) * b;
+
+      // index = 10**(si+ti) * d
+      const ti = Math.floor(Math.log10(c));
+      const d = c*Math.pow(10, -ti);
+
+      div.append(this._makeTextElem('div',
+        `\\(
+          \\approx ${d.toFixed(5)} \\times 10^{${si+ti}}
+        \\)`));
+    }
+
+    return div;
+  }
+
   _showNode(treeType, nodeId) {
     this._clearContainer();
     if (!nodeId) return;
@@ -134,7 +177,7 @@ class NodeInfoView {
     this._addItem(container, 'Depth',
                   this._makeTextElem('div', nodeId.depth()));
     this._addItem(container, 'Index',
-                  this._makeTextElem('div', nodeId.toBigInt()));
+                  this._renderIndex(nodeId));
     this._addItem(container, 'Path',
                   this._renderRLE(path));
     this._addItem(container, 'Continued Fraction',
