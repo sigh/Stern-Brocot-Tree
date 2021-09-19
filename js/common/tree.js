@@ -1,88 +1,76 @@
-class SternBrocotTree {
-  static initState = [[0n,1n], [1n,0n]];
-  static seedValues = [[0n,1n], [1n,0n]];
-
-  // Return [value, left child, right child]
-  static node(s) {
-    const v = [s[0][0] + s[1][0], s[0][1] + s[1][1]];
-    return [v, [s[0], v], [v, s[1]]];
+class TreeState {
+  constructor(m0, n0, m1, n1) {
+    this.m0 = m0;
+    this.m1 = m1;
+    this.n0 = n0;
+    this.n1 = n1;
   }
 
-  // Go left n times.
-  static nthLeftChild(s, n) {
-    const c = [s[0][0]*n + s[1][0], s[0][1]*n + s[1][1]];
-    return [s[0], c];
-  }
-  // Go right n times.
-  static nthRightChild(s, n) {
-    const c = [s[0][0] + s[1][0]*n, s[0][1] + s[1][1]*n];
-    return [c, s[1]];
+  static initialState() {
+    return new TreeState(0n, 1n, 1n, 0n);
   }
 
-  static parentState(s) {
-    const [s0, s1] = s;
-    if (s0[0]+s0[1] < s1[0]+s1[1]) {
-      // We are a left branch.
-      return [s0, [s1[0] - s0[0], s1[1] - s0[1]]];
-    } else {
-      // We are the right branch.
-      return [[s0[0] - s1[0], s0[1] - s1[1]], s1];
+  static getValueFn(treeType) {
+    switch (treeType) {
+      case 'stern-brocot':
+        return (s) => [s.m0+s.m1, s.n0+s.n1];
+      case 'calkin-wilf':
+        return (s) => [s.m0+s.n0, s.m1+s.n1];
     }
+  }
+
+  clone() {
+    return new TreeState(this.m0, this.n0, this.m1, this.n1);
+  }
+
+  // Go left k times.
+  goToLeftChild(k) {
+    this.m1 += this.m0*k;
+    this.n1 += this.n0*k;
+    return this;
+  }
+  // Go right k times.
+  goToRightChild(k) {
+    this.m0 += this.m1*k;
+    this.n0 += this.n1*k;
+    return this;
+  }
+
+  // Go to the parent node.
+  goToParent() {
+    if (this.m0+this.n0 < this.m1+this.n1) {
+      this.m1 -= this.m0;
+      this.n1 -= this.n0;
+    } else {
+      this.m0 -= this.m1;
+      this.n0 -= this.n1;
+    }
+    return this;
   }
 
   // Adjacent states on the same layer.
   // From https://www.researchgate.net/publication/221440223_Recounting_the_Rationals_Twice
 
-  static nextState(s) {
-    const j = (s[0][1]+s[0][0]-1n)/(s[1][1]+s[1][0])
-    const k = (j<<1n)+1n
-    return [s[1], [s[1][0]*k-s[0][0], s[1][1]*k-s[0][1]]];
+  goToNextSibling() {
+    const j = (this.n0+this.m0-1n) / (this.n1+this.m1);
+    const k = (j<<1n)+1n;
+    [this.m0, this.n0, this.m1, this.n1] = [
+      this.m1,
+      this.n1,
+      this.m1*k-this.m0,
+      this.n1*k-this.n0];
+    return this;
   };
-  static prevState(s) {
-    const j = (s[1][1]+s[1][0]-1n)/(s[0][1]+s[0][0])
-    const k = (j<<1n)+1n
-    return [[s[0][0]*k-s[1][0], s[0][1]*k-s[1][1]], s[0]];
+  goToPrevSibling() {
+    const j = (this.n1+this.m1-1n) / (this.n0+this.m0);
+    const k = (j<<1n)+1n;
+    [this.m0, this.n0, this.m1, this.n1] = [
+      this.m0*k-this.m1,
+      this.n0*k-this.n1,
+      this.m0,
+      this.n0];
+    return this;
   };
-}
-
-class CalkinWilfTree {
-  static initState = [1n, 1n];
-  static seedValues = null;
-
-  // Return [value, left child, right child]
-  static node(s) {
-    const m = s[0] + s[1];
-    return [s, [s[0], m], [m, s[1]]]
-  }
-
-  static nthLeftChild(s, n) {
-    return [s[0], s[0]*n+s[1]];
-  }
-  static nthRightChild(s, n) {
-    return [s[0]+s[1]*n, s[1]];
-  }
-
-  static parentState(s) {
-    if (s[0] < s[1]) {
-      // We are the left branch.
-      return [s[0], s[1]-s[0]];
-    } else {
-      // We are the right brach.
-      return [s[0]-s[1], s[1]];
-    }
-  }
-
-  // Adjacent states on the same layer.
-  static nextState(s) {
-    const j = s[0]/s[1]
-    const k = (j<<1n)+1n
-    return [s[1], k*s[1]-s[0]]
-  }
-  static prevState(s) {
-    const j = s[1]/s[0]
-    const k = (j<<1n)+1n
-    return [k*s[0]-s[1], s[0]]
-  }
 }
 
 class NodeId {
@@ -289,13 +277,8 @@ class TreeView {
     this._renderer = renderer;
 
     this._cache = {
-      valid: false,
-      treeType: null,
-    };
-
-    this._treeConfigs = {
-      'stern-brocot': SternBrocotTree,
-      'calkin-wilf': CalkinWilfTree,
+      nodeId: null,
+      state: null,
     };
 
     this._resetTree();
@@ -314,27 +297,23 @@ class TreeView {
   draw(type, selectedNodeId) {
     this._resetTree();
 
-    const config = this._treeConfigs[type];
-
-    if (this._cache.treeType != type) {
-      this._cache.valid = false;
-      this._cache.treeType = type;
-    }
-
-    this._drawTree(selectedNodeId || 0n, config);
+    this._drawTree(selectedNodeId || 0n, TreeState.getValueFn(type));
   }
 
   // Maximum number of nodes to explore from the cache values, if the
   // cache is not an exact hit.
   static _LOG_MAX_CACHE_DELTA = 3n;
 
-  _lookupCache(nodeId, config) {
+  _lookupCache(nodeId) {
     let cache = {...this._cache};
 
-    if (!cache.valid) return [];
+    if (!cache.nodeId) return [];
+
+    let state = cache.state.clone();
+    let cachedNodeId = cache.nodeId;
 
     const m = 1n << this.constructor._LOG_MAX_CACHE_DELTA;
-    let diffD = nodeId.depth() - cache.nodeId.depth();
+    let diffD = nodeId.depth() - cachedNodeId.depth();
 
     if (diffD < 0) {
       // We are shallower than the cache.
@@ -344,9 +323,9 @@ class TreeView {
 
       for (let j = 0; j < diffAdjustment; j++) {
         this.counters.nodesTraversed++;
-        cache.state = config.parentState(cache.state);
+        state.goToParent();
       }
-      cache.nodeId = cache.nodeId.nthParent(diffAdjustment);
+      cachedNodeId = cachedNodeId.nthParent(diffAdjustment);
       diffD = 0n;
     }
 
@@ -355,22 +334,21 @@ class TreeView {
     const targetNodeId = nodeId.nthParent(diffD);
 
     // Check that we aren't too far from the cache.
-    const [distanceRLEI, dir] = targetNodeId.distanceTo(cache.nodeId);
+    const [distanceRLEI, dir] = targetNodeId.distanceTo(cachedNodeId);
     if (distanceRLEI.size() > m) return [];
 
     // Find the target state by looking in the right direction.
     const distance = distanceRLEI.toBigInt();
-    let state = cache.state;
     if (dir > 0) {
       for (let j = 0; j < distance; j++) {
         this.counters.nodesTraversed++;
-        state = config.nextState(state);
+        state.goToNextSibling();
       }
     }
     if (dir < 0) {
       for (let j = 0; j < distance; j++) {
         this.counters.nodesTraversed++;
-        state = config.prevState(state);
+        state.goToPrevSibling();
       }
     }
 
@@ -379,16 +357,16 @@ class TreeView {
   }
 
   // Find inital node at depth == minD starting at targetX.
-  _findInitialNode(depth, expMinD, x, config) {
+  _findInitialNode(depth, expMinD, x) {
     const targetI = this._renderer.indexAtX(depth, expMinD, x);
     const nodeId = NodeId.fromIndex(depth, targetI);
 
-    let [relativeNodeId, state] = this._lookupCache(nodeId, config);
+    let [relativeNodeId, state] = this._lookupCache(nodeId);
 
     // We didn't populate from the cache, so we have to start from the start.
     if (relativeNodeId === undefined) {
       relativeNodeId = nodeId;
-      state = config.initState;
+      state = TreeState.initialState();
     }
 
     // Find the path to the node and follow it.
@@ -397,22 +375,21 @@ class TreeView {
       this.counters.mainLineNodes++;
 
       if (j%2) {
-        state = config.nthLeftChild(state, path[j]);
+        state.goToLeftChild(path[j]);
       } else {
-        state = config.nthRightChild(state, path[j]);
+        state.goToRightChild(path[j]);
       }
     }
 
     // Repopulate the cache.
     let cache = this._cache;
-    cache.valid = true;
     cache.nodeId = nodeId;
-    cache.state = state;
+    cache.state = state.clone();
 
     return [nodeId, state];
   }
 
-  _drawTree(selectedNodeId, config) {
+  _drawTree(selectedNodeId, valueFn) {
     let renderer = this._renderer;
 
     const minD = renderer.minDepth();
@@ -420,7 +397,7 @@ class TreeView {
 
     // Find all the initial drawing nodes.
     const initialNode = this._findInitialNode(
-      minD, expMinD, renderer.minX(), config);
+      minD, expMinD, renderer.minX());
 
     // Determine if there is a selected node prefix to start matching on.
     let truncatedSelectedId = null;
@@ -455,14 +432,14 @@ class TreeView {
           revSelectedPath = path;
         }
         stack.push([nodeId, canvasXStart, canvasY, nodeWidth,
-                    state, revSelectedPath]);
+                    state.clone(), revSelectedPath]);
         this.counters.initialNodes++;
 
         if (nodeId.isLastNode()) break;
 
         nodeId = nodeId.next();
         canvasXStart += nodeWidth;
-        state = config.nextState(state);
+        state.goToNextSibling();
       }
     }
 
@@ -470,11 +447,11 @@ class TreeView {
     if (!stack.length) return;
 
     // Draw seed nodes.
-    if (config.seedValues && minD == 0) {
+    if (minD == 0) {
       // At minD == 0, stack has exactly one element.
       const [nodeId, canvasXStart, canvasY, nodeWidth, s, onSelectedBranch] = stack[0];
-      renderer.drawSeedNode(0, canvasXStart, canvasY, nodeWidth, config.seedValues[0]);
-      renderer.drawSeedNode(1, canvasXStart, canvasY, nodeWidth, config.seedValues[1]);
+      renderer.drawSeedNode(0, canvasXStart, canvasY, nodeWidth, [s.m0, s.n0]);
+      renderer.drawSeedNode(1, canvasXStart, canvasY, nodeWidth, [s.m1, s.n1]);
     }
 
     // Draw the tree branches for the top of the drawing stack.
@@ -489,8 +466,6 @@ class TreeView {
     while (stack.length) {
       let [nodeId, canvasXStart, canvasY, nodeWidth, s, revSelectedPath] = stack.pop();
       this.counters.nodesDrawn++;
-
-      const [v, sL, sR] = config.node(s);
 
       let selectionType = Renderer.SELECT_NONE;
       if (revSelectedPath !== false) {
@@ -508,18 +483,23 @@ class TreeView {
         }
       }
 
-      renderer.drawNode(nodeId, canvasXStart, canvasY, nodeWidth, v, selectionType);
+      renderer.drawNode(
+        nodeId, canvasXStart, canvasY, nodeWidth, valueFn(s), selectionType);
 
-      nodeWidth *= 0.5;
-      canvasY += nodeWidth*0.75;
-      if (nodeWidth >= Renderer.MIN_NODE_WIDTH && canvasY <= maxCanvasY) {
+
+      const canvasYLimit = canvasY + nodeWidth*0.25;
+      if (nodeWidth >= Renderer.MIN_NODE_WIDTH && canvasYLimit <= maxCanvasY) {
+        nodeWidth *= 0.5;
         const canvasXMid = canvasXStart+nodeWidth;
+        canvasY += nodeWidth*0.75;
         if (canvasXMid >= 0) {
-          stack.push([nodeId.leftChild(),  canvasXStart, canvasY, nodeWidth, sL,
+          stack.push([nodeId.leftChild(),  canvasXStart, canvasY, nodeWidth,
+            s.clone().goToLeftChild(1n),
             selectionType === Renderer.SELECT_LEFT && revSelectedPath]);
         }
         if (canvasXMid < maxCanvasX) {
-          stack.push([nodeId.rightChild(), canvasXMid,   canvasY, nodeWidth, sR,
+          stack.push([nodeId.rightChild(), canvasXMid,   canvasY, nodeWidth,
+            s.clone().goToRightChild(1n),
             selectionType === Renderer.SELECT_RIGHT && revSelectedPath]);
         }
       }
