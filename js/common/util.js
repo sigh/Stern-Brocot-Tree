@@ -30,6 +30,10 @@ const clamp = (x, min, max) => {
   return x > max ? max : x < min ? min : x;
 };
 
+const safeEval = (expression) => {
+  return Function('"use strict";return (' + expression + ')')();
+}
+
 // Taken from https://developer.mozilla.org/en-US/docs/Web/API/EventTarget
 // The provided EventTarget is for DOM events.
 class BaseEventTarget {
@@ -77,7 +81,7 @@ class SimpleSpatialIndex {
     this._rows = Math.ceil(width/bucketSize);
     this._cols = Math.ceil(height/bucketSize);
     this._grid = new Uint8Array(this._rows*this._cols);
-    this._slots = new Array();
+    this._slots = [];
   }
 
   insert(obj, x, y, w, h) {

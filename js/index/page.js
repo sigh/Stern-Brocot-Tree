@@ -196,6 +196,28 @@ const setUpDebug = (tree) => {
   });
 };
 
+const extractCfFromString = (str) => {
+  const frac = MathHelpers.parseAsFraction(str);
+  if (frac) return MathHelpers.findContinuedFractionBigInt(...frac);
+
+  const value = safeEval(str);
+
+  if (typeof value == 'number') {
+    // Determine the exact value of the floating point value.
+    const numberParts = MathHelpers.getNumberParts(value);
+    const exp = BigInt(numberParts.intExponent);
+    const m = BigInt(numberParts.intMantissa);
+
+    if (exp >= 0) return [m << exp];
+    return MathHelpers.findContinuedFractionBigInt(m, 1n << -exp);
+  } else if (Array.isArray(value)) {
+    // Interpret array as continued fraction cooeficients.
+    return value.map(BigInt);
+  }
+
+  return undefined;
+}
+
 const setUpControlPanel = (tree) => {
   // Set up tree type selector.
   let treeSelect = document.getElementById('tree-type');
@@ -216,30 +238,17 @@ const setUpControlPanel = (tree) => {
   form.onsubmit = (e) => {
     e.preventDefault();
 
-    const value = Function('"use strict";return (' + findExp.value + ')')();
+    const cf = extractCfFromString(findExp.value);
 
-    let cf = null;
-
-    if (typeof value == 'number') {
-      // Determine the exact value of the floating point value.
-      const floatParts = MathHelpers.getFloatParts(value);
-      cf = floatParts.exponent >= 0
-        ? floatParts.int << floatParts.exponent
-        : MathHelpers.findContinuedFractionBigInt(
-            floatParts.int, 1n << -floatParts.exponent);
-    } else if (Array.isArray(value)) {
-      // Interpret array as continued fraction cooeficients.
-      cf = value.map(BigInt);
+    if (cf !== undefined) {
+      tree.selectNodeByContinuedFraction(cf);
     }
-
-    tree.selectNodeByContinuedFraction(cf);
 
     return false;
   };
 };
 
 let tree;
-
 const initPage = () => {
   let canvas = document.getElementById('tree-vis');
 

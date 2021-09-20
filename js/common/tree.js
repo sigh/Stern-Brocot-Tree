@@ -98,7 +98,7 @@ class NodeId {
     let rle = [];
 
     // Copy up to maxDepth deep into the continued fraction.
-    const maxDepth = 1n << 20n;
+    const maxDepth = 1n << 30n;
     let depth = 0n;
     for (let i = 0; i  < cf.length; i++) {
       if (depth + cf[i] > maxDepth) break;
