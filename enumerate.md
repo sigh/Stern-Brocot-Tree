@@ -309,13 +309,17 @@ The concrete algorithm is:
 
 </div>
 
-We now have a nice bijection. We can iterate over all the rationals by
-repeatedly evaluating `q = toRational(toNatural(q)+1)`.
-
-However, this is not ideal -- let's see if we can iterate without having to
-repeatedly fall back to the natural number representation.
 
 # Optimizing with Euclid
+
+We now have a nice bijection.
+
+We can even iterate over all the rationals by
+repeatedly evaluating `q = toRational(toNatural(q)+1)`, although that is a
+bit cumbersome as we have to continually translate between representations.
+
+However, before we find a better way of iterating, let's optimize this algorithm
+a bit to uncover some deeper connections.
 
 <details>
   <summary>
@@ -403,124 +407,179 @@ the path and the
 [continued fraction](https://en.wikipedia.org/wiki/Continued_fraction)
 representation of the rational!
 
-# Iterating
+# Iterating the Matrix
 
-To iterate, we will construct a successor function $$ s'(S) $$ which can operate
-on the matrix representation. The index of $$ s'(S) $$ in the natural number
-representation should be one added to that of $$ S $$.
+To a find more direct method of iteration, we will construct a successor function
+$$ s(S) $$ which can operate on the matrix representation.
 
 To do this we need to:
 
-1. Detect when we are at the end of the layer, and move to the next one.
-2. Find the successor for a node in the same layer.
+<details>
+  <summary>
+  1\. Detect when we are at the end of the layer, and move to the next one.
 
-First, case (1).
+  This involves knowing when $$ f(S) $$ is an integer $$ k-1 $$ and then going
+  to $$ \frac{1}{k} $$:
 
-For the $$ n^{th} $$ layer
-(where $$ \frac{1}{1} $$ is layer $$ 0 $$),
-the first index is $$ 2^n \to L^n $$ and the last index is $$ 2^{n+1}-1 \to R^n $$.
-We can prove by induction that:
+  $$
+    s\left(\begin{pmatrix} 1 & 0 \\ k & 1 \end{pmatrix}\right) =
+      \begin{pmatrix} 1 & k+1 \\ 0 & 1 \end{pmatrix}
+  $$
+  </summary>
 
-$$
+  For the $$ k^{th} $$ layer
+  (where $$ \frac{1}{1} $$ is layer $$ 0 $$):
 
-R^n = \begin{pmatrix} 1 & 0 \\ n & 1 \end{pmatrix}
-\implies f(R^n) = n+1
-$$
+  * The first path is $$ L^k $$ with index $$ 2^k $$
+  * The last path is $$ R^k $$ with index $$ 2^{k+1}-1 $$
 
-$$
-L^n = \begin{pmatrix} 1 & n \\ 0 & 1 \end{pmatrix}
-\implies f(L^n) = \frac{1}{n+1}
-$$
+  We can now show by induction that:
 
-This determines the behaviour at the end of a layer:
-$$
-  s\left(\begin{pmatrix} 1 & 0 \\ n & 1 \end{pmatrix}\right) =
-    \begin{pmatrix} 1 & n+1 \\ 0 & 1 \end{pmatrix}
-$$
+  $$
 
-(Note: It is sufficient to check that the top-right entry is zero to match
-this case, since only the last entry is adjacent to $$ \frac{1}{0} $$.)
+  R^k = \begin{pmatrix} 1 & 0 \\ k & 1 \end{pmatrix}
+  \implies f(R^k) = k+1
+  $$
 
-For case (2), note that to increment a number in binary, we increment the least
-significant $$ 0 $$ digit, and set bits to the right to $$ 0 $$. For example:
+  $$
+  L^k = \begin{pmatrix} 1 & k \\ 0 & 1 \end{pmatrix}
+  \implies f(L^k) = \frac{1}{k+1}
+  $$
 
-$$
-\color{grey}100\color{black}0_2 + 1_2 =  \color{grey}100\color{black}1_2 \quad
-\color{grey}10\color{black}011_2 + 1_2 = \color{grey}10\color{black}100_2 \quad
-            01111_2 + 1_2 =  10000_2 \quad
-$$
+  Thus we can detect when we are at $$ R^{k-1} $$ and move to $$ L^{k} $$.
 
-In the path string this means finding the trailing $$ R $$s and
-preceding $$ L $$, and transposing them:
+  Note: It is sufficient to check that the top-right left entry is $$ 1 $$,
+        since the parent of every integer is an integer.
+</details>
 
-$$
-  s'(S)
-  = s'(TLR^j)
-  = TRL^j
-$$ where $$ T $$ is an arbitrary prefix.
+<details>
+  <summary>
+  2\. Find the successor for a node in the same layer.
 
-Next we can use the inverse matrices to replace the suffix of $$ S $$ to
-obtain a equation for $$ s' $$:
+  To find the successor we must go back up the tree until we find a common
+  ancestor, and back down the tree to the successor. If $$ j $$ is the number of
+  trailing $$ R $$s in the path for $$ S $$ then:
 
-$$
-  s'(S)
-  = T(LR^jR^{-j}L^{-1})RL^j
-  = SR^{-j}L^{-1}RL^j
-  = S \begin{pmatrix} 2j+1 & 1 \\ -1 & 0 \end{pmatrix}
-$$
+  $$
+    s(S)
+    = SR^{-j}L^{-1}RL^j
+    = S \begin{pmatrix} 0 & -1 \\ 1 & 2j+1 \end{pmatrix}
+  $$
+  </summary>
 
-Now we need to determine $$ j $$. If we were after the leading $$ R $$s we
+  Consider how a number is incremented in binary:
+  we increment the least significant $$ 0 $$ digit, and set all the bits to the
+  right to of the $$ 0 $$ to $$ 1 $$. For example:
+
+  $$
+  \color{grey}100\color{black}0_2 + 1_2 =  \color{grey}100\color{black}1_2 \quad
+  \color{grey}10\color{black}011_2 + 1_2 = \color{grey}10\color{black}100_2 \quad
+              01111_2 + 1_2 =  10000_2 \quad
+  $$
+
+  In the path string this means finding the trailing $$ R $$s and
+  preceding $$ L $$, and transposing them:
+
+  $$
+    s(S)
+    = s(TLR^j)
+    = TRL^j
+  $$ where $$ T $$ is an arbitrary prefix.
+
+  Next we can use the inverse matrices to remove suffix of $$ S $$
+  (or, travelling back up the tree), and replace it with the path to the
+  successor:
+
+  $$
+    s(S)
+    = T(LR^jR^{-j}L^{-1})RL^j
+    = SR^{-j}L^{-1}RL^j
+  $$
+
+  Finally it is possible to calculate that:
+
+  $$
+   R^{-j}L^{-1}RL^j
+   = \begin{pmatrix} 1 & 0 \\ -j & 1 \end{pmatrix}
+     \begin{pmatrix} 1 & -1 \\ 0 & 1 \end{pmatrix}
+     \begin{pmatrix} 1 & 0 \\ 1 & 1 \end{pmatrix}
+     \begin{pmatrix} 1 & j \\ 0 & 1 \end{pmatrix}
+   = \begin{pmatrix} 0 & -1 \\ 1 & 2j+1 \end{pmatrix}
+  $$
+
+</details>
+
+Now we need to determine $$ j $$. If we were after the _leading_ $$ R $$s we
 could take advantage of what we learnt from Euclid's algorithm above. With
 a clever manipulation of matrices we can still use it to get:
 
 <details>
   <summary>
   $$ S = \begin{pmatrix} n & n' \\ m & m' \end{pmatrix} \implies
-     j = \left\lfloor \frac{n'+m'-1}{n+m} \right\rfloor  $$
+     j = \left\lfloor \frac{n+m-1}{n'+m'} \right\rfloor  $$
   </summary>
-  
-  We can use the matrix transposition to reverse the path because
-  $$ (AB)^T = B^T A^T $$ for any matrix. Thus:
-  
-  $$ S^T = (PLR^j)^T = R^{Tj}L^TP^T $$
-  
-  Then:
-  
+
+  First note following general properties about matrices:
+
+  $$ (AB)^T = B^T A^T $$
+
   $$
-  R^T = L \text{ and } L^T = R \text{ by inspection}
+     J = \begin{pmatrix}0 & 1 \\ 1 & 0 \end{pmatrix}
+     \implies
+     J^2 = I
   $$
-  
+
   $$
-  \implies S^T = L^jRP^T
+     A^\tau = JA^TJ \text{ where } A^\tau \text{ is } A
+     \text{ transposed along the off-diagonal }
   $$
-  
+
+  Also, by inspection, $$ L^\tau = L \text{ and } R^\tau = R $$.
+
+  Define an arbitrary path as:
+  $$ S = L^{l_0} R^{r_1} ... L^{l_n} R^{r_n} $$
+
+  Then the result of reversing the path gives us the same result as transposing
+  $$ S $$ along the anti-diagonal:
+
   $$
-  \implies
-  f(S^T) = f(L^jRP^T) = f\left(\begin{pmatrix} n & m \\ n' & m' \end{pmatrix}\right)
-  = \frac{n'+m'}{n+m}
+  \begin{eqnarray}
+    S^\tau &=& JS^TJ \\
+           &=& J(R^{r_n T} L^{l_n T} ... R^{r_1 T} L^{l_0 T})J \\
+           &=& JR^{r_n T} JJ L^{l_n T} JJ ... JJ R^{r_1 T} JJ L^{l_0 T}J \\
+           &=& R^{r_n} L^{l_n} ... R^{r_1} L^{l_0} \\
+  \end{eqnarray}
   $$
-  
-  Because $$ R $$ and $$ L $$ are transposes, $$ S^T $$ represents a valid path,
-  and thus $$ q = \frac{n'+m'}{n+m} $$ is a valid rational in the tree.
-  This allows us to determine $$ j $$ by finding the number of _leading_ $$ L $$s
-  in the path representation of $$ q $$.
-  
-  Given our algorithm above, this is the number of times we can subtract
-  $$ n+m $$ from $$ n'+m' $$ without reaching $$ 0 $$, thus:
-  
-  $$ j = \left\lfloor \frac{n'+m'-1}{n+m} \right\rfloor  $$
-  
+
+  Because $$ S^\tau $$ is itself a valid path, it is valid rational in the
+  Stern-Brocot tree where:
+
+  $$
+    f(S^\tau)
+    = f\left(\begin{pmatrix} m' & n' \\ m & n\end{pmatrix}\right)
+    = \frac{m+n}{m'+n'}
+  $$
+
+  This allows us to determine $$ j $$ by finding the number of _leading_
+  $$ R $$s in the path representation of $$ \frac{m+n}{m'+n'} $$, since these
+  are the now the _first_ branches we take.
+
+  Given our Euclidean algorithm above, this is the number of times we can
+  subtract $$ n'+m' $$ from $$ n+m $$ without reaching $$ 0 $$, thus:
+
+  $$ j = \left\lfloor \frac{n+m-1}{n'+m'} \right\rfloor  $$
 </details>
+
 
 Putting it all together we have:
 
 $$
 
-s'(S) = s'\left(\begin{pmatrix} n & n' \\ m & m' \end{pmatrix}\right)
+s(S) = s\left(\begin{pmatrix} n & n' \\ m & m' \end{pmatrix}\right)
 =
 \begin{cases}
-  \begin{pmatrix} 1 & m+2 \\ 0 & 1 \end{pmatrix}    & n' = 0   \\
-  S\begin{pmatrix} 2j+1 & 1 \\ -1 & 0 \end{pmatrix} & n' \ne 0 \\
+  \begin{pmatrix} 1 & m+2 \\ 0 & 1 \end{pmatrix}    & n = 1   \\
+  S\begin{pmatrix} 0 & -1 \\ 1 & 2j+1 \end{pmatrix} & n \ne 1 \\
 \end{cases}
 $$
 
@@ -530,15 +589,16 @@ We can now iterate over the rationals without having to run the Euclidean
 algorithm each time! However, we need to carry around extra state $$ S $$,
 because we can't recover the state directly from a given rational.
 
-Let's do better.
+Let's fix this.
 
-# Calkin-Wilf Tree
+# The Calkin-Wilf Tree
 
-Given the path representation of a rational number, let's instead interpret the
-path in _reverse_. This new tree still contains all the rationals, but with the
-numbers permuted within each layer:
+The iteration forumla above was made possible considering the paths in
+_reverse_, so let's explore that further.
+If we reverse the paths, we create a new tree which still contains all the
+rationals, but with the numbers permuted within each layer.
 
-This is the [Calkin-Wilf tree](https://en.wikipedia.org/wiki/Calkin%E2%80%93Wilf_tree).
+This is the [Calkin-Wilf tree](https://en.wikipedia.org/wiki/Calkin%E2%80%93Wilf_tree):
 
 <div>
   <canvas id='calkin-wilf-demo' width="500" height="400">
@@ -551,8 +611,7 @@ This is an unfortunate loss, but let's see what we get in return.
 
 <details>
   <summary>
-  How to we traverse the tree?
-  The children of $$ \frac{a}{b} $$
+  The children of a node $$ \frac{a}{b} $$
   are simply $$ \frac{a}{a+b} $$ and $$ \frac{a+b}{b} $$.
   </summary>
 
@@ -586,80 +645,90 @@ This is an unfortunate loss, but let's see what we get in return.
     = \frac{jn+m+jn'+m'}{n+n'}
     = \frac{a+jb}{b}
   $$
-
 </details>
 
-Now let's define the successor function as
-$$ s(q) = s(\frac{a}{b}) = s(f(S)) $$.
-We will calculate $$ s $$ in two parts:
+Unlike the Stern-Brocot tree, we don't need to carry around a state matrix
+to compute the children, we can use the fraction directly! Let's see how this
+affects the iteration formula.
+
+## Iterating over the Rationals
+
+Now let's define the successor function over rationals as
+$$ s(q=\frac{a}{b}) $$.
 
 <details>
   <summary>
-  1\. Detect when we are at the end of the layer, and move to the next one.
 
-  This is the case where $$ q $$ is an integer:
-  $$ s(q) = s(\frac{a}{1}) = \frac{1}{q+1} $$
+  It turns out that we can use the same state matrix $$ S $$ that we used for
+  the Stern-Brocot tree to determine the values for the Calkin-Wilf tree.
+
+  We define $$ f' $$ to represent this value:
+  $$
+    q = f'(S) = f'\left(\begin{pmatrix} n & n' \\ m & m' \end{pmatrix}\right)
+              = \frac{m+n}{m'+n'}
+  $$
+
   </summary>
 
-  The outer nodes $$ L^j $$ and $$ R^j $$ are the same as in the
-  Stern-Brocot tree, because the reversed path is the same. Hence it is
-  sufficient to detect when $$ q $$ is an integer.
+  $$ f' $$ is equal to $$ f $$ applied to the reverse path. Recall above,
+  when determing the value of $$ j $$ in the iteration forumla
+  we discovered the following property:
+
+  $$
+    f'\left(\begin{pmatrix} n & n' \\ m & m' \end{pmatrix}\right)
+    = f'(S)
+    = f(S^\tau) = f(JS^TJ)
+    \text{ where } J = \begin{pmatrix}0 & 1 \\ 1 & 0 \end{pmatrix}
+  $$
+
+  Hence:
+
+  $$q = \frac{m+n}{m'+n'}$$
+
 </details>
 
 <details>
-
   <summary>
-  2\. Find the successor for a node in the same layer:
-  $$ s(q) = \frac{1}{2 \lfloor q \rfloor + 1 - q} $$
+
+  We can now expand out our iteration formula to find the dramatically simpler
+  formula:
+
+  $$ s(q) = f'(s(S)) =
+    \begin{cases}
+      \frac{1}{q} & b = 1   \\
+      \frac{1}{2j+1-q} & b \ne 1 \\
+    \end{cases}
+  $$
+
   </summary>
 
-  Since the path is reversed, we want care about the prefix of the string.
-  Otherwise the reasoning is the same as for the Stern-Brocot tree:
+  Plug $$ f'(s(S)) $$ using the Stern-Brocot iteration formula:
 
   $$
-    s(f(S))
-     = s(f(R^jLT))
-     = f(L^jRT)
+  f'(s(S))
+  =
+  \begin{cases}
+    f'\left(\begin{pmatrix} 1 & m+2 \\ 0 & 1 \end{pmatrix}\right) & n = 1   \\
+    f'\left(S\begin{pmatrix} 0 & -1 \\ 1 & 2j+1 \end{pmatrix}\right) & n \ne 1 \\
+  \end{cases}
   $$
 
-  Define $$ f(T) = \frac{c}{d} $$. We can easily compute the following:
+  The first case can be calculated directly
+  (or simply from observing that we require $$ s(q) = \frac{1}{q+1} $$):
 
   $$
-  \begin{eqnarray}
-    f(R^jLT) &=& \frac{c+j(c+d)}{c+d} \\
-    f(L^jRT) &=& \frac{c+d}{j(c+d)+d} \\
-  \end{eqnarray}
+    f'\left(\begin{pmatrix} 1 & m+2 \\ 0 & 1 \end{pmatrix}\right) = \frac{1}{m+1} = \frac{1}{a+1} = \frac{1}{q+1}
   $$
 
-  Thus:
-
-  $$ q = \frac{a}{b} = f(S) = \frac{c+j(c+d)}{c+d} $$
-
-  We can now find the values of $$c, d \text{ and } j $$:
+  Expanding the second case we get:
 
   $$
   \begin{eqnarray}
-    b &=& c+d \text{ and } a = c+j(c+d) \\
-    j &=& \frac{a-c}{c+d} = \frac{a}{b} - \frac{c}{c+d}
-          \implies
-          j = \left\lfloor j \right\rfloor
-            = \left\lfloor \frac{a}{b} \right\rfloor
-            = \lfloor q \rfloor \\
-    c &=& a-j(c+d) = a - \lfloor q \rfloor b \\
-    d &=& b - c = b - a + \lfloor q \rfloor b
-  \end{eqnarray}
-  $$
-
-  This lets us determine $$ s(q) $$ for this case:
-
-  $$
-
-  \begin{eqnarray}
-    s(q) &=& s(L^jRT) = \frac{c+d}{j(c+d)+d} \\
-          &=& \frac{b}{jb+d} \\
-          &=& \frac{b}{\lfloor q \rfloor b + b - a + \lfloor q \rfloor b} \\
-          &=& \frac{b}{2 \lfloor q \rfloor b + b - a} \\
-          &=& \frac{1}{2 \lfloor q \rfloor + 1 - q} \\
+    f'\left(S\begin{pmatrix} 0 & -1 \\ 1 & 2j+1 \end{pmatrix}\right)
+      &=& f'\left(\begin{pmatrix} m'(2j+1)-m & n'(2j+1)-n \\ m' & n' \end{pmatrix}\right) \\
+      &=& \frac{m'+n'}{m'(2j+1)-m+n'(2j+1)-n} \\
+      &=& \frac{b}{b(2j+1)-a} \\
+      &=& \frac{1}{2j+1-q}
   \end{eqnarray}
   $$
 
@@ -670,22 +739,31 @@ We will calculate $$ s $$ in two parts:
   However, the two cases can be combined into one.
   </summary>
 
-  For case (1), $$ q $$ is an integer hence:
+  When $$ b = 1 $$, $$ q $$ is an integer, hence:
 
   $$
     q = \lfloor q \rfloor \implies
     \frac{1}{q+1} = \frac{1}{2 \lfloor q \rfloor + 1 - q}
   $$
 
+  When $$ b \ne 1 $$, we can also simplify $$ j $$:
+
+  $$
+  \begin{eqnarray}
+    j &=& \left\lfloor \frac{n+m-1}{n'+m'} \right\rfloor \\
+      &=& \left\lfloor \frac{a-1}{b} \right\rfloor \\
+      &=& \left\lfloor \frac{a}{b} \right\rfloor \text{ when } b \ne 1 \\
+      &=& \lfloor q \rfloor
+  \end{eqnarray}
+  $$
+
 </details>
 
-Giving us a final, simple formula for iterating through the rationals:
+Giving a final, simple formula for iterating through the positive rational numbers:
 
 $$
   s(q) = \frac{1}{2 \lfloor q \rfloor + 1 - q}
 $$
-
-TODO: Hide long parts of the proof (both this section and previous).
 
 TODO: Demo
 
