@@ -94,6 +94,16 @@ class RLEInteger {
   numLeadingOnes() {
     return this.#size ? this.#rle[0] : 0n;
   }
+  lastBit() {
+    return this.#rle.length&1;
+  }
+
+  // TODO: Fix so that this is just hte same as checking size.
+  isZero() {
+    if (this.#size == 0) return true;
+    if (this.#rle[0] > 0n) return false;
+    return this.#rle.length <= 2;
+  }
 
   appendBit(b, n) {
     if (n === 0n) return;

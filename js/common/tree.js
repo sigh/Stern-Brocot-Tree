@@ -74,6 +74,9 @@ class TreeState {
 }
 
 class NodeId {
+
+  static ONE = new NodeId(RLEInteger.fromBigInt(0n), 0n);
+
   constructor(rleint, depth) {
     this._depth = depth;
     this._rleint = rleint;
@@ -83,11 +86,6 @@ class NodeId {
     return new NodeId(rleint, depth);
   }
 
-  static fromIndex(depth, index) {
-    let rleint = RLEInteger.fromBigInt(index);
-    return NodeId.fromRLEInteger(rleint, depth);
-  }
-
   static _normalizeRle(rle) {
     while (rle.length && rle[rle.length-1] == 0) rle.pop();
     if (!rle.length) rle.push(0n);
@@ -95,23 +93,13 @@ class NodeId {
   }
 
   static fromContinuedFraction(treeType, cf) {
-    let rle = [];
-
-    // Copy up to maxDepth deep into the continued fraction.
-    const maxDepth = 1n << 30n;
-    let depth = 0n;
-    for (let i = 0; i  < cf.length; i++) {
-      if (depth + cf[i] > maxDepth) break;
-
-      depth += cf[i];
-      rle.push(cf[i]);
-    }
-
     // To get to the tree path, we need to decrement the last cf value by 1.
+    const rle = cf.slice();
     rle[rle.length-1]--;
-    depth--;
 
-    let rleint = new RLEInteger(rle);
+    const depth = rle.reduce((a,b) => a+b);
+
+    const rleint = new RLEInteger(rle);
     rleint.normalize();
 
     // The Calkin-Wilf tree has the reverse path.
@@ -160,15 +148,27 @@ class NodeId {
     let rleint = this._rleint.suffix(n);
     return NodeId.fromRLEInteger(rleint, n);
   }
+  isRightChild() {
+    const rleint = this._rleint;
+    if (rleint.size() == 0) return false;
+    return rleint.lastBit() == 1;
+  }
 
   next() {
     const nextRLEInt = RLEInteger.add(this._rleint, RLEInteger.ONE);
+    return NodeId.fromRLEInteger(nextRLEInt, this._depth);
+  }
+  prev() {
+    const nextRLEInt = RLEInteger.sub(this._rleint, RLEInteger.ONE)[0];
     return NodeId.fromRLEInteger(nextRLEInt, this._depth);
   }
 
   isLastNode() {
     // The result must be either 0 or all 1s.
     return this._depth == this._rleint.numLeadingOnes();
+  }
+  isFirstNode() {
+    return this._rleint.isZero();
   }
 
   depth() { return this._depth; }
@@ -182,8 +182,8 @@ class NodeId {
          && 0 === RLEInteger.cmp(this._rleint, other._rleint));
   }
 
-  distanceTo(other) {
-    return RLEInteger.sub(this._rleint, other._rleint);
+  toString() {
+    return this.depth() + ': ' + this.index();
   }
 }
 
@@ -199,20 +199,23 @@ class TreeController extends BaseEventTarget {
     this._stickyNodeId = null;
 
     this._canvas = canvas;
-    this._viewport = new Viewport(canvas);
-    this._viewport.addEventListener('update', () => this._update());
-    this._viewport.addEventListener('click', () => {
+    let viewport = new Viewport(canvas);
+    viewport.addEventListener('click', () => {
       this._stickyNodeId = this._hoverNodeId;
       this.dispatchEvent('selectionChange');
       this._update();
     });
-    this._viewport.addEventListener('mousemove', (coord) => {
+    viewport.addEventListener('mousemove', (coord) => {
       this._updateSelection(coord);
     });
     this._canvas.style.cursor = 'grab';
 
-    let renderer = new Renderer(canvas, this._viewport);
-    this._tree = new TreeView(renderer);
+    let treeViewport = new TreeViewport(viewport);
+    treeViewport.addEventListener('update', () => this._update());
+    this._treeViewport = treeViewport;
+
+    let renderer = new Renderer(canvas, treeViewport);
+    this._tree = new TreeView(renderer, treeViewport);
 
     this._update();
   }
@@ -250,8 +253,7 @@ class TreeController extends BaseEventTarget {
   }
 
   resetPosition() {
-    this._viewport.resetPosition();
-    this._update();
+    this._treeViewport.resetView();
   }
 
   resizeCanvas(size) {
@@ -261,25 +263,21 @@ class TreeController extends BaseEventTarget {
   }
 
   selectNodeByContinuedFraction(cf) {
-    const node = this._tree.nodeForContinuedFraction(
-      this._treeType, cf);
-    this._stickyNodeId = node.nodeId;
-    if (node.nodeId) {
-      this._viewport.setPosition(node.origin, node.scale);
+    const nodeId = NodeId.fromContinuedFraction(this._treeType, cf);
+    this._stickyNodeId = nodeId;
+    if (nodeId) {
+      this._treeViewport.moveToNodeId(nodeId);
     }
     this._update();
     this.dispatchEvent('selectionChange');
   }
 }
 
+// TODO: Split functionality into renderer and treeviewport.
 class TreeView {
-  constructor(renderer) {
+  constructor(renderer, treeViewport) {
     this._renderer = renderer;
-
-    this._cache = {
-      nodeId: null,
-      state: null,
-    };
+    this._treeViewport = treeViewport;
 
     this._resetTree();
   }
@@ -300,77 +298,13 @@ class TreeView {
     this._drawTree(selectedNodeId || 0n, TreeState.getValueFn(type));
   }
 
-  // Maximum number of nodes to explore from the cache values, if the
-  // cache is not an exact hit.
-  static _LOG_MAX_CACHE_DELTA = 3n;
+  _findInitialNode() {
+    const nodeId = this._treeViewport.referenceNode();
 
-  _lookupCache(nodeId) {
-    let cache = {...this._cache};
-
-    if (!cache.nodeId) return [];
-
-    let state = cache.state.clone();
-    let cachedNodeId = cache.nodeId;
-
-    const m = 1n << this.constructor._LOG_MAX_CACHE_DELTA;
-    let diffD = nodeId.depth() - cachedNodeId.depth();
-
-    if (diffD < 0) {
-      // We are shallower than the cache.
-      // Adjust cache to our depth - but don't go too far.
-      const diffAdjustment = -diffD;
-      if (diffAdjustment > m) return [];
-
-      for (let j = 0; j < diffAdjustment; j++) {
-        this.counters.nodesTraversed++;
-        state.goToParent();
-      }
-      cachedNodeId = cachedNodeId.nthParent(diffAdjustment);
-      diffD = 0n;
-    }
-
-    // Cache depth is at our level or shallower.
-    // Normalize I to the cache depth and find the appropriate bounds.
-    const targetNodeId = nodeId.nthParent(diffD);
-
-    // Check that we aren't too far from the cache.
-    const [distanceRLEI, dir] = targetNodeId.distanceTo(cachedNodeId);
-    if (distanceRLEI.size() > m) return [];
-
-    // Find the target state by looking in the right direction.
-    const distance = distanceRLEI.toBigInt();
-    if (dir > 0) {
-      for (let j = 0; j < distance; j++) {
-        this.counters.nodesTraversed++;
-        state.goToNextSibling();
-      }
-    }
-    if (dir < 0) {
-      for (let j = 0; j < distance; j++) {
-        this.counters.nodesTraversed++;
-        state.goToPrevSibling();
-      }
-    }
-
-    const relativeNodeId = nodeId.suffix(nodeId.depth()-targetNodeId.depth());
-    return [relativeNodeId, state];
-  }
-
-  // Find inital node at depth == minD starting at targetX.
-  _findInitialNode(depth, expMinD, x) {
-    const targetI = this._renderer.indexAtX(depth, expMinD, x);
-    const nodeId = NodeId.fromIndex(depth, targetI);
-
-    let [relativeNodeId, state] = this._lookupCache(nodeId);
-
-    // We didn't populate from the cache, so we have to start from the start.
-    if (relativeNodeId === undefined) {
-      relativeNodeId = nodeId;
-      state = TreeState.initialState();
-    }
 
     // Find the path to the node and follow it.
-    const path = relativeNodeId.getPath();
+    let state = TreeState.initialState();
+    const path = nodeId.getPath();
     for (let j = 0; j < path.length; j++) {
       this.counters.mainLineNodes++;
 
@@ -381,23 +315,15 @@ class TreeView {
       }
     }
 
-    // Repopulate the cache.
-    let cache = this._cache;
-    cache.nodeId = nodeId;
-    cache.state = state.clone();
-
     return [nodeId, state];
   }
 
   _drawTree(selectedNodeId, valueFn) {
+    if (!this._treeViewport.treeVisible()) return;
+
     let renderer = this._renderer;
 
-    const minD = renderer.minDepth();
-    const expMinD = 1n << minD;
-
-    // Find all the initial drawing nodes.
-    const initialNode = this._findInitialNode(
-      minD, expMinD, renderer.minX());
+    const minD = this._treeViewport.minDepth();
 
     // Determine if there is a selected node prefix to start matching on.
     let truncatedSelectedId = null;
@@ -411,12 +337,13 @@ class TreeView {
     // Set up the drawing stack.
     let stack = [];
     {
-      const nodeWidth = this._renderer.nodeWidth(minD);
-      const canvasY = this._renderer.canvasY(minD);
+      const nodeWidth = this._treeViewport.nodeWidth();
+      const canvasY = this._treeViewport.yStart() - nodeWidth*0.25;
 
-      let [nodeId, state] = initialNode;
-      let canvasXStart = this._renderer.canvasXStart(nodeId);
+      // Find all the initial drawing nodes.
+      let [nodeId, state] = this._findInitialNode();
 
+      let canvasXStart = this._treeViewport.xStart();
       while (canvasXStart < this._renderer.maxCanvasX()) {
         let revSelectedPath = false;
         if (nodeId.equals(truncatedSelectedId)) {
@@ -505,29 +432,15 @@ class TreeView {
       }
     }
   }
-
-  nodeForContinuedFraction(treeType, cf) {
-    const nodeId = NodeId.fromContinuedFraction(treeType, cf);
-    const pos = this._renderer.centeredNodePosition(nodeId);
-
-    return {
-      nodeId: nodeId,
-      d: nodeId.depth(),
-      scale: pos.scale,
-      origin: pos.origin,
-    }
-  }
 }
 
 class Renderer {
-  static SPATIAL_INDEX_BUCKET_SIZE = 10;
-
-  constructor(canvas, viewport) {
+  constructor(canvas, treeViewport) {
     this._canvas = canvas;
 
     this._ctx = canvas.getContext('2d');
 
-    this._viewport = viewport;
+    this._treeViewport = treeViewport;
   }
 
   resetCanvas() {
@@ -535,7 +448,7 @@ class Renderer {
     this._ctx.textAlign = 'center';
     this._ctx.textBaseline = 'middle';
 
-    this._viewport.resetSpatialIndex(Renderer.SPATIAL_INDEX_BUCKET_SIZE);
+    this._treeViewport.resetSpatialIndex();
   };
 
   _drawBar(ctx, x, y, length, width) {
@@ -630,65 +543,11 @@ class Renderer {
     }
   }
 
-  nodeWidth(d) {
-    const layerWidth = this._viewport.scale >> d;
-    return this._viewport.toCanvasY(layerWidth);
-  }
-
-  // Return the min x for a node in canvas coordinates.
-  canvasXStart(nodeId) {
-    let viewport = this._viewport;
-
-    const x = (nodeId.index() * viewport.scale) >> nodeId.depth();
-    return viewport.toCanvasX(x - viewport.origin.x);
-  }
-
-  canvasY(d) {
-    let viewport = this._viewport;
-
-    const layerWidth = viewport.scale >> d;
-    const layerHeight = layerWidth >> 1n;
-    const nodeHeight = viewport.toCanvasY(layerHeight);
-
-    const yMin = layerHeight;
-    const canvasYMin = viewport.toCanvasY(viewport.origin.y - yMin);
-
-    return canvasYMin - nodeHeight*0.5;
-  }
-
   maxCanvasX() {
     return this._canvas.width;
   }
   maxCanvasY() {
     return this._canvas.height;
-  }
-
-  centeredNodePosition(nodeId) {
-    const viewport = this._viewport;
-    const d = nodeId.depth();
-
-    // Determine what our target size is, but we may have to adjust if the
-    // scale is too small.
-    const targetNodeHeight = this._canvas.height/4;
-    const targetLayerHeight = viewport.fromCanvasY(targetNodeHeight);
-    let scale = targetLayerHeight << (d+1n);
-    if (scale < viewport.MIN_SCALE) scale = viewport.MIN_SCALE;
-
-    const layerHeight = scale >> (d+1n);
-
-    const xMid = ((nodeId.index() * scale) >> d) + layerHeight;
-    const yMid = layerHeight + layerHeight/2n;
-
-    const screenMidY = viewport.fromCanvasY(this._canvas.height/2);
-    const screenMidX = viewport.fromCanvasX(this._canvas.width/2);
-
-    return {
-      scale: scale,
-      origin: {
-        x: xMid - screenMidX,
-        y: screenMidY - yMid,
-      },
-    }
   }
 
   static SELECT_NONE = 0;
@@ -699,39 +558,6 @@ class Renderer {
   static _PATH_COLOR = '#0000aa';
   static _SELECTED_COLOR = '#0099ff';
   static _SEED_COLOR = 'grey'
-
-  // The mininmum depth visible in the viewport.
-  minDepth() {
-    const viewport = this._viewport;
-    const scale = viewport.scale;
-    const origin = viewport.origin;
-
-    // Exclude nodes which are above the viewport.
-    let minD = MathHelpers.log2BigInt(scale/origin.y) - 1n;
-    if (minD < 0) minD = 0n;
-
-    return minD;
-  }
-
-  minX() {
-    return this._viewport.origin.x;
-  }
-
-  // Returns the index for the node closest to x.
-  // Index will always be valid, even outside the tree.
-  indexAtX(d, expD, x) {
-    const scale = this._viewport.scale;
-
-    let index = (x<<d)/scale;
-    if (index < 0) index = 0n;
-    if (index >= expD) index = expD-1n;
-
-    return index;
-  }
-
-  initialLayerWidth() {
-    return this._viewport.scale;
-  }
 
   static MIN_NODE_WIDTH = 10;
 
@@ -754,7 +580,7 @@ class Renderer {
     }
     const rect = this._drawFraction(frac, canvasX, canvasY, nodeHeight, color);
 
-    this._viewport.addToIndex(nodeId, ...rect);
+    this._treeViewport.addToIndex(nodeId, ...rect);
   }
 
   drawSeedNode(xOffsetRatio, canvasXStart, canvasYMid, nodeWidth, v) {
@@ -784,69 +610,231 @@ class Renderer {
   }
 }
 
+class TreeViewport extends BaseEventTarget {
+  #viewport;
+  // Reference node is the top-left most node of the viewport.
+  #referenceNode;
+
+  LAYER_WIDTH = 100;
+  LAYER_HEIGHT = this.LAYER_WIDTH/2;
+  DEFAULT_TREE_HEIGHT = 0.95;  // As a percentage of the canvas height.
+
+  constructor(viewport) {
+    super();
+
+    this.#viewport = viewport;
+    viewport.addEventListener('update', () => this.#update());
+
+    this.resetView();
+  }
+
+  #update() {
+    this.#clampPosition();
+    this.#maybeUpdateReferenceNode();
+
+    this.dispatchEvent('update');
+  }
+
+  #clampPosition() {
+    const buffer = 40;
+    const viewport = this.#viewport;
+
+    const treeYMin = this.#treeYMin();
+    const yMax = viewport.maxCanvasY();
+    if (treeYMin < yMax - buffer) {
+      const delta = (yMax - buffer)-treeYMin;
+      viewport.origin.v += delta/viewport.scale;
+    }
+  }
+
+  #maybeUpdateReferenceNode() {
+    const viewport = this.#viewport;
+    const nodeWidth = this.nodeWidth();
+
+    // Check if we've moved up enough that we should start at the next layer.
+    // Limit scale, so that the initial nodes are not too small.
+    if (viewport.scale > 1 && viewport.origin.v < -this.LAYER_HEIGHT*1.5) {
+      this.#referenceNode = this.#referenceNode.leftChild();
+
+      // Rescale to the size, keeping the top left corner of the node in the
+      // same place.
+      viewport.rescale(0.5, this.xStart(), this.yStart());
+      // The child is now in the parent's place, so adjust accordingly.
+      this.#viewport.origin.v += this.LAYER_HEIGHT;
+    }
+
+    // Check if we've moved down enough that we need to display the parent.
+    // Obviously, avoid going above the above the first node.
+    //   Also do this if our scale is too small, to stay within reasonable
+    //   bounds.
+    if (this.#referenceNode.depth() > 0 && (
+        (viewport.scale < 0.2 || viewport.origin.v > -this.LAYER_HEIGHT))) {
+      const isRightChild = this.#referenceNode.isRightChild();
+      this.#referenceNode = this.#referenceNode.nthParent(1n);
+
+      // Rescale to the size, keeping the top left corner of the node in the
+      // same place.
+      viewport.rescale(2, this.xStart(), this.yStart());
+      // The parent is now where the child was, so adjust.
+      this.#viewport.origin.v -= this.LAYER_HEIGHT*0.5;
+      // If it was a right child, the start needs to be shifted also.
+      if (isRightChild) {
+        this.#viewport.origin.u += this.LAYER_WIDTH*0.5;
+      }
+    }
+
+    // Check if we've moved far left enough that we need to go to the next
+    // sibling.
+    if (!this.#referenceNode.isLastNode() && viewport.origin.u > this.LAYER_WIDTH) {
+      this.#referenceNode = this.#referenceNode.next();
+      this.#viewport.origin.u -= this.LAYER_WIDTH;
+    }
+    // Check if we've moved right right enough that we need to go to the next
+    // sibling.
+    if (!this.#referenceNode.isFirstNode() && viewport.origin.u < 0) {
+      this.#referenceNode = this.#referenceNode.prev();
+      this.#viewport.origin.u += this.LAYER_WIDTH;
+    }
+  }
+
+  #treeYMin() {
+    return this.#viewport.toCanvasY(this.LAYER_HEIGHT*2);
+  }
+  treeVisible() {
+    return this.#treeYMin() > 0;
+  }
+
+  minDepth() {
+    return this.#referenceNode.depth();
+  }
+  referenceNode() {
+    return this.#referenceNode;
+  }
+
+  // Return the min x for a node in canvas coordinates.
+  xStart() {
+    return this.#viewport.toCanvasX(0);
+  }
+
+  nodeWidth() {
+    const viewport = this.#viewport;
+    return this.LAYER_WIDTH*viewport.scale;
+  }
+
+  yStart() {
+    return this.#viewport.toCanvasY(this.LAYER_WIDTH*0.5);
+  }
+
+  static #SPATIAL_INDEX_BUCKET_SIZE = 10;
+  resetSpatialIndex() {
+    this.#viewport.resetSpatialIndex(this.constructor.#SPATIAL_INDEX_BUCKET_SIZE);
+  }
+  addToIndex(...args) {
+    this.#viewport.addToIndex(...args);
+  }
+
+  resetView() {
+    this.moveToNodeId(NodeId.ONE);
+  }
+  moveToNodeId(nodeId) {
+    // Focus on parent so we have context.
+    this.#referenceNode = nodeId.depth() ? nodeId.nthParent(1n) : nodeId;
+    this.#focusOnReferenceNode();
+
+    // Go up enough until the entire tree is visible.
+    let ref;
+    do {
+      ref = this.#referenceNode;
+      this.#maybeUpdateReferenceNode();
+    } while(ref !== this.#referenceNode);
+    this.#update();
+  }
+
+  #focusOnReferenceNode() {
+    const viewport = this.#viewport;
+
+    const width = viewport.maxCanvasX();
+    const height = viewport.maxCanvasY();
+
+
+    // Scale things so that the tree (from the reference node) takes up almost
+    // all the screen height.
+    const initialScale = this.DEFAULT_TREE_HEIGHT * height/(this.LAYER_HEIGHT*2);
+
+    // Reset position.
+    viewport.scale = initialScale;
+    viewport.origin.u = 0
+    viewport.origin.v = 0;
+
+    // Center the tree.
+    viewport.origin.u = -viewport.fromCanvasX(width)/2+this.LAYER_WIDTH/2;
+  }
+}
+
 class Viewport extends BaseEventTarget {
-  SIZE = Math.pow(2, 16);
-  MIN_SCALE = BigInt(Math.floor(this.SIZE * 0.9));
-  INITIAL_SCALE = BigInt(Math.floor(this.SIZE * 0.97));
+  // x-y is canvas coordinates.
+  // u-v are scaled/world coordinates.
+  origin = {u: 0, v: 0};
+  // Larger scale = more zoomed in.
+  scale = 1;
+
+  #canvas;
+  #dragDistance;
+  #spatialIndex;
 
   constructor(canvas) {
     super();
 
-    this._canvas = canvas;
+    this.#canvas = canvas;
 
-    this.scale = 0n;
-    this.origin = {x: 0n, y: 0n, y1: 0n};
-    this.resetPosition();
+    this.#setUpMouseWheel(canvas);
+    this.#setUpMouseDrag(canvas);
+    this.#setUpMouseMove(canvas);
+    this.#setUpMouseClick(canvas);
 
-    this._setUpMouseWheel(canvas);
-    this._setUpMouseDrag(canvas);
-    this._setUpMouseMove(canvas);
-    this._setUpMouseClick(canvas);
+    this.#dragDistance = 0;
 
-    this._dragDistance = 0;
-
-    this._spatialIndex = null;
+    this.#spatialIndex = null;
   }
 
-  _setUpMouseClick(canvas) {
+  #setUpMouseClick(canvas) {
     canvas.onclick = (e) => {
-      if (this._dragDistance <= 1) {
+      if (this.#dragDistance <= 1) {
         this.dispatchEvent('click');
       }
     };
   }
 
-  _setUpMouseMove(canvas) {
+  #setUpMouseMove(canvas) {
     canvas.onmousemove = (e) => {
-      const coord = this._clientXYToCoord(e.clientX, e.clientY);
+      const coord = this.#clientXYToCoord(e.clientX, e.clientY);
       this.dispatchEvent('mousemove', coord);
     };
   }
 
-  _setUpMouseDrag(canvas) {
+  #setUpMouseDrag(canvas) {
     let dragPos = {x: 0, y:0};
     let origin = this.origin;
 
     const mouseMoveHandler = (e) => {
       e.preventDefault();
-      const pixelScale = this._pixelScale();
-      const dcx = e.clientX - dragPos.x;
-      const dcy = e.clientY - dragPos.y;
-      this._dragDistance += Math.abs(dcx) + Math.abs(dcy);  // Manhatten distance.
-      const dx = pixelScale * dcx;
-      const dy = pixelScale * dcy;
-      origin.x -= BigInt(Math.floor(dx));
-      origin.y += BigInt(Math.floor(dy));
+      const dx = e.clientX - dragPos.x;
+      const dy = e.clientY - dragPos.y;
+      this.#dragDistance += Math.abs(dx) + Math.abs(dy);  // Manhatten distance.
+      const du = dx / this.scale;
+      const dv = dy / this.scale;
+      origin.u -= du;
+      origin.v += dv;
       dragPos.x = e.clientX;
       dragPos.y = e.clientY;
-      this._update();
+      this.#update();
     };
 
     canvas.onmousedown = (e) => {
       e.preventDefault();
       dragPos.x = e.clientX;
       dragPos.y = e.clientY;
-      this._dragDistance = 0;
+      this.#dragDistance = 0;
       document.addEventListener('mousemove', mouseMoveHandler);
       let mouseUpHandler = () => {
         document.removeEventListener('mousemove', mouseMoveHandler);
@@ -856,126 +844,93 @@ class Viewport extends BaseEventTarget {
     };
   }
 
-  _rescale(ds, canvasX, canvasY) {
-    let origin = this.origin;
+  rescale(ds, canvasX, canvasY) {
+    const origin = this.origin;
 
     // Remove offset from origin, so that it will be corretly handled when
     // scaling.
-    let pixelScale = this._pixelScale();
-    origin.x += BigInt(Math.floor(pixelScale * canvasX));
-    origin.y -= BigInt(Math.floor(pixelScale * canvasY));
+    origin.u += canvasX/this.scale
+    origin.v -= canvasY/this.scale;
 
-    // Scale by 2**ds. Scale ds by 2**x so that we only deal with integers.
-    const f = 5n;
-    let dsF = BigInt(Math.floor(Math.pow(2, Number(f) + ds)));
-    this.scale = this.scale * dsF >> f;
-    if (this.scale < this.MIN_SCALE) {
-      dsF = dsF * this.MIN_SCALE / this.scale;
-      this.scale = this.MIN_SCALE;
-    }
-    origin.x = origin.x * dsF >> f;
-    origin.y = origin.y * dsF >> f;
+    this.scale = this.scale * ds;
 
     // Reoffset origin after scaling.
-    pixelScale = this._pixelScale();
-    origin.x -= BigInt(Math.floor(pixelScale * canvasX));
-    origin.y += BigInt(Math.floor(pixelScale * canvasY));
+    origin.u -= canvasX/this.scale;
+    origin.v += canvasY/this.scale;
   }
 
-  _setUpMouseWheel(canvas) {
+  #setUpMouseWheel(canvas) {
     canvas.onwheel = (e) => {
       e.preventDefault();
 
       // Clamp the delta, and ensure that we don't zoom out too far.
-      const ds = clamp(e.deltaY * 0.01, -0.5, 0.5);
+      const ds = Math.pow(2, clamp(e.deltaY * 0.01, -0.5, 0.5));
 
-      const canvasOrigin = this._canvasOrigin();
+      const canvasOrigin = this.#canvasOrigin();
       const canvasX = e.clientX - canvasOrigin.x;
       const canvasY = e.clientY - canvasOrigin.y;
 
-      this._rescale(ds, canvasX, canvasY);
+      this.rescale(ds, canvasX, canvasY);
 
-      this._update();
+      this.#update();
     };
   }
 
-  _pixelScale() {
-    return this.SIZE / this._canvas.height;
-  }
-
-  resetPosition() {
-    this.scale = this.INITIAL_SCALE;
-
-    // Offset origin so the tree is centered.
-    const offset =
-      -(BigInt(Math.floor(this._pixelScale()*this._canvas.width)) - this.scale) / 2n;
-    this.origin.x = offset;
-    this.origin.y = this.scale;
-  }
-
-  setPosition(origin, scale) {
-    this.origin.x = origin.x;
-    this.origin.y = origin.y;
-    this.scale = scale < this.MIN_SCALE ? this.MIN_SCALE : scale;
-    this._clampPosition();
-  }
-
   resetSpatialIndex(bucketSize) {
-    this._spatialIndex = new SimpleSpatialIndex(
-      this._canvas.width,
-      this._canvas.height,
+    this.#spatialIndex = new SimpleSpatialIndex(
+      this.#canvas.width,
+      this.#canvas.height,
       bucketSize);
   }
 
   addToIndex(nodeId, x, y, w, h) {
-    if (this._spatialIndex) {
-      this._spatialIndex.insert(nodeId, x, y, w, h);
+    if (this.#spatialIndex) {
+      this.#spatialIndex.insert(nodeId, x, y, w, h);
     }
   }
 
-  toCanvasX(x) {
-    return Number(x) * this._canvas.height / this.SIZE;
+  maxCanvasX() {
+    return this.#canvas.width;
   }
-  toCanvasY(y) {
-    return Number(y) * this._canvas.height / this.SIZE;
+  maxCanvasY() {
+    return this.#canvas.height;
   }
 
-  fromCanvasY(canvasY) {
-    return BigInt(Math.floor(canvasY * this.SIZE / this._canvas.height));
+  toCanvasX(u) {
+    return (u - this.origin.u)*this.scale;
   }
+  toCanvasY(v) {
+    return (v + this.origin.v)*this.scale;
+  }
+
   fromCanvasX(canvasX) {
-    return BigInt(Math.floor(canvasX * this.SIZE / this._canvas.height));
+    return canvasX/this.scale + this.origin.u;
+  }
+  fromCanvasY(canvasY) {
+    return canvasY/this.scale - this.origin.v;
   }
 
-  _canvasOrigin() {
-    const bb = this._canvas.getBoundingClientRect();
+  #canvasOrigin() {
+    const bb = this.#canvas.getBoundingClientRect();
     return {x: bb.x, y: bb.y};
   }
 
-  _clampPosition() {
-    // Clamp the y direction so that we can easily zoom in without running
-    // off the bottom of the tree.
-    this.origin.y = clamp(this.origin.y, this.MIN_SCALE, this.scale + this.MIN_SCALE);
-  }
-
-  _update() {
-    this._clampPosition();
+  #update() {
     this.dispatchEvent('update');
   }
 
-  _clientXYToCoord(clientX, clientY) {
-    const canvasOrigin = this._canvasOrigin();
+  #clientXYToCoord(clientX, clientY) {
+    const canvasOrigin = this.#canvasOrigin();
     const canvasX = clientX - canvasOrigin.x;
     const canvasY = clientY - canvasOrigin.y;
-    const pixelScale = this._pixelScale();
 
     let obj;
-    if (this._spatialIndex) {
-      obj = this._spatialIndex.get(canvasX, canvasY);
+    if (this.#spatialIndex) {
+      obj = this.#spatialIndex.get(canvasX, canvasY);
     }
 
-    return {x: this.origin.x + BigInt(Math.floor(pixelScale*canvasX)),
-            y: this.origin.y - BigInt(Math.floor(pixelScale*canvasY)),
+    return {x: this.fromCanvasX(this.scale*canvasX),
+            y: this.fromCanvasY(this.scale*canvasY),
             canvasX: canvasX,
             canvasY: canvasY,
             scale: this.scale,

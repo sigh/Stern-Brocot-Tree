@@ -192,7 +192,8 @@ const setUpDebug = (tree) => {
   let treeView = tree._tree;
 
   tree.addEventListener( 'update', () => {
-    debugDiv.textContent = JSON.stringify(treeView.counters).replaceAll('"', '');
+    const counters = JSON.stringify(treeView.counters).replaceAll('"', '');
+    debugDiv.textContent = counters + ' ' + tree._treeViewport.referenceNode().depth();
   });
 };
 
