@@ -144,10 +144,6 @@ class NodeId {
 
     return NodeId.fromRLEInteger(rleint, newDepth);
   }
-  suffix(n) {
-    let rleint = this._rleint.suffix(n);
-    return NodeId.fromRLEInteger(rleint, n);
-  }
   isRightChild() {
     const rleint = this._rleint;
     if (rleint.size() == 0) return false;
@@ -182,8 +178,87 @@ class NodeId {
          && 0 === RLEInteger.cmp(this._rleint, other._rleint));
   }
 
+  relativeNodeTo(other) {
+    if (!other) return null;
+    if (!other._rleint.hasPrefix(this._rleint)) return null;
+
+    const n = other.depth() - this.depth();
+    const rleint = other._rleint.suffix(n);
+    return NodeId.fromRLEInteger(rleint, n);
+  }
+
   toString() {
     return this.depth() + ': ' + this.index();
+  }
+}
+
+class NodeIdAndState {
+  nodeId;
+  state;
+
+  constructor(nodeId, state) {
+    this.nodeId = nodeId;
+    this.state = state;
+  }
+
+  static fromNodeId(nodeId) {
+    let state = TreeState.initialState();
+
+    // Find the path to the node and follow it.
+    const path = nodeId.getPath();
+    for (let j = 0; j < path.length; j++) {
+      if (j%2) {
+        state.goToLeftChild(path[j]);
+      } else {
+        state.goToRightChild(path[j]);
+      }
+    }
+
+    return new NodeIdAndState(nodeId, state);
+  }
+
+  clone() {
+    return new NodeIdAndState(this.nodeId, this.state.clone());
+  }
+
+  depth() {
+    return this.nodeId.depth();
+  }
+
+  isRightChild() {
+    return this.nodeId.isRightChild();
+  }
+  isFirstNode() {
+    return this.nodeId.isFirstNode();
+  }
+  isLastNode() {
+    return this.nodeId.isLastNode();
+  }
+
+  goToParent() {
+    this.nodeId = this.nodeId.nthParent(1n);
+    this.state.goToParent();
+    return this;
+  }
+  goToLeftChild() {
+    this.nodeId = this.nodeId.leftChild();
+    this.state.goToLeftChild(1n);
+    return this;
+  }
+  goToRightChild() {
+    this.nodeId = this.nodeId.rightChild();
+    this.state.goToRightChild(1n);
+    return this;
+  }
+  goToNextSibling() {
+    this.nodeId = this.nodeId.next();
+    this.state.goToNextSibling();
+    return this;
+  }
+  goToPrevSibling() {
+    this.nodeId = this.nodeId.prev();
+    this.state.goToPrevSibling();
+    return this;
   }
 }
 
@@ -286,8 +361,6 @@ class TreeView {
     this._renderer.resetCanvas();
     this.counters = {
       nodesDrawn: 0,
-      nodesTraversed: 0,
-      mainLineNodes: 0,
       initialNodes: 0,
     }
   }
@@ -298,41 +371,10 @@ class TreeView {
     this._drawTree(selectedNodeId || 0n, TreeState.getValueFn(type));
   }
 
-  _findInitialNode() {
-    const nodeId = this._treeViewport.referenceNode();
-
-
-    // Find the path to the node and follow it.
-    let state = TreeState.initialState();
-    const path = nodeId.getPath();
-    for (let j = 0; j < path.length; j++) {
-      this.counters.mainLineNodes++;
-
-      if (j%2) {
-        state.goToLeftChild(path[j]);
-      } else {
-        state.goToRightChild(path[j]);
-      }
-    }
-
-    return [nodeId, state];
-  }
-
   _drawTree(selectedNodeId, valueFn) {
     if (!this._treeViewport.treeVisible()) return;
 
     let renderer = this._renderer;
-
-    const minD = this._treeViewport.minDepth();
-
-    // Determine if there is a selected node prefix to start matching on.
-    let truncatedSelectedId = null;
-    if (selectedNodeId) {
-      const selectedNodeDepth = selectedNodeId.depth();
-      if (selectedNodeDepth >= minD) {
-        truncatedSelectedId = selectedNodeId.nthParent(selectedNodeDepth - minD);
-      }
-    }
 
     // Set up the drawing stack.
     let stack = [];
@@ -341,32 +383,27 @@ class TreeView {
       const canvasY = this._treeViewport.yStart() - nodeWidth*0.25;
 
       // Find all the initial drawing nodes.
-      let [nodeId, state] = this._findInitialNode();
+      let node = this._treeViewport.referenceNode();
 
       let canvasXStart = this._treeViewport.xStart();
       while (canvasXStart < this._renderer.maxCanvasX()) {
         let revSelectedPath = false;
-        if (nodeId.equals(truncatedSelectedId)) {
-          // We are on a selected branch.
-
-          // Find the relative path from here to the selected node.
-          let relative = selectedNodeId.suffix(selectedNodeId.depth()-minD);
-          let path = relative.getPath();
+        const relativeSelectedNodeId = node.nodeId.relativeNodeTo(selectedNodeId);
+        if (relativeSelectedNodeId) {
+          const path = relativeSelectedNodeId.getPath();
 
           // Reverse the path so that we can efficiently keep truncating it.
           if (path.length%2==0) path.push(0n);
           path.reverse();
           revSelectedPath = path;
         }
-        stack.push([nodeId, canvasXStart, canvasY, nodeWidth,
-                    state.clone(), revSelectedPath]);
+        stack.push([node.clone(), canvasXStart, canvasY, nodeWidth, revSelectedPath]);
         this.counters.initialNodes++;
 
-        if (nodeId.isLastNode()) break;
+        if (node.isLastNode()) break;
 
-        nodeId = nodeId.next();
+        node.goToNextSibling();
         canvasXStart += nodeWidth;
-        state.goToNextSibling();
       }
     }
 
@@ -374,16 +411,18 @@ class TreeView {
     if (!stack.length) return;
 
     // Draw seed nodes.
-    if (minD == 0) {
-      // At minD == 0, stack has exactly one element.
-      const [nodeId, canvasXStart, canvasY, nodeWidth, s, onSelectedBranch] = stack[0];
-      renderer.drawSeedNode(0, canvasXStart, canvasY, nodeWidth, [s.m0, s.n0]);
-      renderer.drawSeedNode(1, canvasXStart, canvasY, nodeWidth, [s.m1, s.n1]);
+    {
+      const [node, canvasXStart, canvasY, nodeWidth, onSelectedBranch] = stack[0];
+      if (node.depth() == 0) {
+        const s = node.state;
+        renderer.drawSeedNode(0, canvasXStart, canvasY, nodeWidth, [s.m0, s.n0]);
+        renderer.drawSeedNode(1, canvasXStart, canvasY, nodeWidth, [s.m1, s.n1]);
+      }
     }
 
     // Draw the tree branches for the top of the drawing stack.
     for (let j = 0; j < stack.length; j++) {
-      const [nodeId, canvasXStart, canvasY, nodeWidth, s, onSelectedBranch] = stack[j];
+      const [node, canvasXStart, canvasY, nodeWidth, onSelectedBranch] = stack[j];
       renderer.drawTreeBranches(canvasXStart, canvasY, nodeWidth);
     }
 
@@ -391,7 +430,7 @@ class TreeView {
     const maxCanvasX = this._renderer.maxCanvasX();
     const maxCanvasY = this._renderer.maxCanvasY();
     while (stack.length) {
-      let [nodeId, canvasXStart, canvasY, nodeWidth, s, revSelectedPath] = stack.pop();
+      let [node, canvasXStart, canvasY, nodeWidth, revSelectedPath] = stack.pop();
       this.counters.nodesDrawn++;
 
       let selectionType = Renderer.SELECT_NONE;
@@ -411,7 +450,7 @@ class TreeView {
       }
 
       renderer.drawNode(
-        nodeId, canvasXStart, canvasY, nodeWidth, valueFn(s), selectionType);
+        node.nodeId, canvasXStart, canvasY, nodeWidth, valueFn(node.state), selectionType);
 
 
       const canvasYLimit = canvasY + nodeWidth*0.25;
@@ -420,13 +459,11 @@ class TreeView {
         const canvasXMid = canvasXStart+nodeWidth;
         canvasY += nodeWidth*0.75;
         if (canvasXMid >= 0) {
-          stack.push([nodeId.leftChild(),  canvasXStart, canvasY, nodeWidth,
-            s.clone().goToLeftChild(1n),
+          stack.push([node.clone().goToLeftChild(),  canvasXStart, canvasY, nodeWidth,
             selectionType === Renderer.SELECT_LEFT && revSelectedPath]);
         }
         if (canvasXMid < maxCanvasX) {
-          stack.push([nodeId.rightChild(), canvasXMid,   canvasY, nodeWidth,
-            s.clone().goToRightChild(1n),
+          stack.push([node.clone().goToRightChild(), canvasXMid,   canvasY, nodeWidth,
             selectionType === Renderer.SELECT_RIGHT && revSelectedPath]);
         }
       }
@@ -654,7 +691,7 @@ class TreeViewport extends BaseEventTarget {
     // Check if we've moved up enough that we should start at the next layer.
     // Limit scale, so that the initial nodes are not too small.
     if (viewport.scale > 1 && viewport.origin.v < -this.LAYER_HEIGHT*1.5) {
-      this.#referenceNode = this.#referenceNode.leftChild();
+      this.#referenceNode.goToLeftChild();
 
       // Rescale to the size, keeping the top left corner of the node in the
       // same place.
@@ -670,7 +707,7 @@ class TreeViewport extends BaseEventTarget {
     if (this.#referenceNode.depth() > 0 && (
         (viewport.scale < 0.2 || viewport.origin.v > -this.LAYER_HEIGHT))) {
       const isRightChild = this.#referenceNode.isRightChild();
-      this.#referenceNode = this.#referenceNode.nthParent(1n);
+      this.#referenceNode.goToParent();
 
       // Rescale to the size, keeping the top left corner of the node in the
       // same place.
@@ -686,13 +723,13 @@ class TreeViewport extends BaseEventTarget {
     // Check if we've moved far left enough that we need to go to the next
     // sibling.
     if (!this.#referenceNode.isLastNode() && viewport.origin.u > this.LAYER_WIDTH) {
-      this.#referenceNode = this.#referenceNode.next();
+      this.#referenceNode.goToNextSibling();
       this.#viewport.origin.u -= this.LAYER_WIDTH;
     }
     // Check if we've moved right right enough that we need to go to the next
     // sibling.
     if (!this.#referenceNode.isFirstNode() && viewport.origin.u < 0) {
-      this.#referenceNode = this.#referenceNode.prev();
+      this.#referenceNode.goToPrevSibling();
       this.#viewport.origin.u += this.LAYER_WIDTH;
     }
   }
@@ -704,11 +741,8 @@ class TreeViewport extends BaseEventTarget {
     return this.#treeYMin() > 0;
   }
 
-  minDepth() {
-    return this.#referenceNode.depth();
-  }
   referenceNode() {
-    return this.#referenceNode;
+    return this.#referenceNode.clone();
   }
 
   // Return the min x for a node in canvas coordinates.
@@ -736,17 +770,19 @@ class TreeViewport extends BaseEventTarget {
   resetView() {
     this.moveToNodeId(NodeId.ONE);
   }
-  moveToNodeId(nodeId) {
+  moveToNodeId(node) {
     // Focus on parent so we have context.
-    this.#referenceNode = nodeId.depth() ? nodeId.nthParent(1n) : nodeId;
+    this.#referenceNode = NodeIdAndState.fromNodeId(node);
+    if (this.#referenceNode.depth()) this.#referenceNode.goToParent();
+
     this.#focusOnReferenceNode();
 
     // Go up enough until the entire tree is visible.
     let ref;
     do {
-      ref = this.#referenceNode;
+      ref = this.#referenceNode.nodeId;
       this.#maybeUpdateReferenceNode();
-    } while(ref !== this.#referenceNode);
+    } while(ref !== this.#referenceNode.nodeId);
     this.#update();
   }
 

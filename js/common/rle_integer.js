@@ -189,6 +189,20 @@ class RLEInteger {
     return new RLEInteger(rle);
   }
 
+  hasPrefix(other) {
+    if (other.#size > this.#size) return false;
+    if (other.#size == 0) return true;
+
+    // Ensure all the digits before last one are equal.
+    let i = 0;
+    for (; i < other.#rle.length-1; i++) {
+      if (other.#rle[i] != this.#rle[i]) return false;
+    }
+
+    // The last digit can be less than or equal.
+    return other.#rle[i] <= this.#rle[i];
+  }
+
   static cmp(a, b) {
     if (a.#size > b.#size) return 1;
     if (a.#size < b.#size) return -1;
