@@ -285,18 +285,24 @@ class TreeController extends BaseEventTarget {
     });
     this._canvas.style.cursor = 'grab';
 
-    let treeViewport = new TreeViewport(viewport);
-    treeViewport.addEventListener('update', () => this._update());
-    this._treeViewport = treeViewport;
+    this._treeViewport = new TreeViewport(viewport);
+    this._treeViewport.addEventListener('update', () => this._update());
 
-    let renderer = new Renderer(canvas, treeViewport);
-    this._tree = new TreeView(renderer, treeViewport);
+    this._renderer = new Renderer(canvas, this._treeViewport);
 
     this._update();
   }
 
+  _draw() {
+    this._renderer.resetCanvas();
+
+    this._renderer.drawTree(
+      this.selectedNodeId() || 0n,
+      TreeState.getValueFn(this._treeType));
+  }
+
   _update() {
-    this._tree.draw(this._treeType, this.selectedNodeId());
+    this._draw();
     this.dispatchEvent('update');
   }
 
@@ -348,129 +354,6 @@ class TreeController extends BaseEventTarget {
   }
 }
 
-// TODO: Split functionality into renderer and treeviewport.
-class TreeView {
-  constructor(renderer, treeViewport) {
-    this._renderer = renderer;
-    this._treeViewport = treeViewport;
-
-    this._resetTree();
-  }
-
-  _resetTree() {
-    this._renderer.resetCanvas();
-    this.counters = {
-      nodesDrawn: 0,
-      initialNodes: 0,
-    }
-  }
-
-  draw(type, selectedNodeId) {
-    this._resetTree();
-
-    this._drawTree(selectedNodeId || 0n, TreeState.getValueFn(type));
-  }
-
-  _drawTree(selectedNodeId, valueFn) {
-    if (!this._treeViewport.treeVisible()) return;
-
-    let renderer = this._renderer;
-
-    // Set up the drawing stack.
-    let stack = [];
-    {
-      const nodeWidth = this._treeViewport.nodeWidth();
-      const canvasY = this._treeViewport.yStart() - nodeWidth*0.25;
-
-      // Find all the initial drawing nodes.
-      let node = this._treeViewport.referenceNode();
-
-      let canvasXStart = this._treeViewport.xStart();
-      while (canvasXStart < this._renderer.maxCanvasX()) {
-        let revSelectedPath = false;
-        const relativeSelectedNodeId = node.nodeId.relativeNodeTo(selectedNodeId);
-        if (relativeSelectedNodeId) {
-          const path = relativeSelectedNodeId.getPath();
-
-          // Reverse the path so that we can efficiently keep truncating it.
-          if (path.length%2==0) path.push(0n);
-          path.reverse();
-          revSelectedPath = path;
-        }
-        stack.push([node.clone(), canvasXStart, canvasY, nodeWidth, revSelectedPath]);
-        this.counters.initialNodes++;
-
-        if (node.isLastNode()) break;
-
-        node.goToNextSibling();
-        canvasXStart += nodeWidth;
-      }
-    }
-
-    // Check if we have anything to draw!
-    if (!stack.length) return;
-
-    // Draw seed nodes.
-    {
-      const [node, canvasXStart, canvasY, nodeWidth, onSelectedBranch] = stack[0];
-      if (node.depth() == 0) {
-        const s = node.state;
-        renderer.drawSeedNode(0, canvasXStart, canvasY, nodeWidth, [s.m0, s.n0]);
-        renderer.drawSeedNode(1, canvasXStart, canvasY, nodeWidth, [s.m1, s.n1]);
-      }
-    }
-
-    // Draw the tree branches for the top of the drawing stack.
-    for (let j = 0; j < stack.length; j++) {
-      const [node, canvasXStart, canvasY, nodeWidth, onSelectedBranch] = stack[j];
-      renderer.drawTreeBranches(canvasXStart, canvasY, nodeWidth);
-    }
-
-    // Draw nodes.
-    const maxCanvasX = this._renderer.maxCanvasX();
-    const maxCanvasY = this._renderer.maxCanvasY();
-    while (stack.length) {
-      let [node, canvasXStart, canvasY, nodeWidth, revSelectedPath] = stack.pop();
-      this.counters.nodesDrawn++;
-
-      let selectionType = Renderer.SELECT_NONE;
-      if (revSelectedPath !== false) {
-        let len = revSelectedPath.length;
-        while (revSelectedPath[len-1] === 0n) {
-          revSelectedPath.pop();
-          len--;
-        }
-        if (len == 0) {
-          selectionType = Renderer.SELECT_FINAL;
-          revSelectedPath = false;
-        } else {
-          selectionType = len%2 ?  Renderer.SELECT_RIGHT : Renderer.SELECT_LEFT;
-          revSelectedPath[len-1]--;
-        }
-      }
-
-      renderer.drawNode(
-        node.nodeId, canvasXStart, canvasY, nodeWidth, valueFn(node.state), selectionType);
-
-
-      const canvasYLimit = canvasY + nodeWidth*0.25;
-      if (nodeWidth >= Renderer.MIN_NODE_WIDTH && canvasYLimit <= maxCanvasY) {
-        nodeWidth *= 0.5;
-        const canvasXMid = canvasXStart+nodeWidth;
-        canvasY += nodeWidth*0.75;
-        if (canvasXMid >= 0) {
-          stack.push([node.clone().goToLeftChild(),  canvasXStart, canvasY, nodeWidth,
-            selectionType === Renderer.SELECT_LEFT && revSelectedPath]);
-        }
-        if (canvasXMid < maxCanvasX) {
-          stack.push([node.clone().goToRightChild(), canvasXMid,   canvasY, nodeWidth,
-            selectionType === Renderer.SELECT_RIGHT && revSelectedPath]);
-        }
-      }
-    }
-  }
-}
-
 class Renderer {
   constructor(canvas, treeViewport) {
     this._canvas = canvas;
@@ -486,6 +369,10 @@ class Renderer {
     this._ctx.textBaseline = 'middle';
 
     this._treeViewport.resetSpatialIndex();
+    this.counters = {
+      nodesDrawn: 0,
+      initialNodes: 0,
+    }
   };
 
   _drawBar(ctx, x, y, length, width) {
@@ -580,13 +467,6 @@ class Renderer {
     }
   }
 
-  maxCanvasX() {
-    return this._canvas.width;
-  }
-  maxCanvasY() {
-    return this._canvas.height;
-  }
-
   static SELECT_NONE = 0;
   static SELECT_FINAL = 1;
   static SELECT_LEFT = 2;
@@ -644,6 +524,103 @@ class Renderer {
 
     // Draw the seed.
     this._drawFraction(v, canvasX, canvasYSeed, nodeHeight, Renderer._SEED_COLOR);
+  }
+
+  drawTree(selectedNodeId, valueFn) {
+    if (!this._treeViewport.treeVisible()) return;
+
+    // Set up the drawing stack.
+    let stack = [];
+    {
+      const nodeWidth = this._treeViewport.nodeWidth();
+      const canvasY = this._treeViewport.yStart() - nodeWidth*0.25;
+
+      // Find all the initial drawing nodes.
+      let node = this._treeViewport.referenceNode();
+
+      let canvasXStart = this._treeViewport.xStart();
+      while (canvasXStart < this._canvas.width) {
+        let revSelectedPath = false;
+        const relativeSelectedNodeId = node.nodeId.relativeNodeTo(selectedNodeId);
+        if (relativeSelectedNodeId) {
+          const path = relativeSelectedNodeId.getPath();
+
+          // Reverse the path so that we can efficiently keep truncating it.
+          if (path.length%2==0) path.push(0n);
+          path.reverse();
+          revSelectedPath = path;
+        }
+        stack.push([node.clone(), canvasXStart, canvasY, nodeWidth, revSelectedPath]);
+        this.counters.initialNodes++;
+
+        if (node.isLastNode()) break;
+
+        node.goToNextSibling();
+        canvasXStart += nodeWidth;
+      }
+    }
+
+    // Check if we have anything to draw!
+    if (!stack.length) return;
+
+    // Draw seed nodes.
+    {
+      const [node, canvasXStart, canvasY, nodeWidth, onSelectedBranch] = stack[0];
+      if (node.depth() == 0) {
+        const s = node.state;
+        this.drawSeedNode(0, canvasXStart, canvasY, nodeWidth, [s.m0, s.n0]);
+        this.drawSeedNode(1, canvasXStart, canvasY, nodeWidth, [s.m1, s.n1]);
+      }
+    }
+
+    // Draw the tree branches for the top of the drawing stack.
+    for (let j = 0; j < stack.length; j++) {
+      const [node, canvasXStart, canvasY, nodeWidth, onSelectedBranch] = stack[j];
+      this.drawTreeBranches(canvasXStart, canvasY, nodeWidth);
+    }
+
+    // Draw nodes.
+    const maxCanvasX = this._canvas.width;
+    const maxCanvasY = this._canvas.height;
+    while (stack.length) {
+      let [node, canvasXStart, canvasY, nodeWidth, revSelectedPath] = stack.pop();
+      this.counters.nodesDrawn++;
+
+      let selectionType = Renderer.SELECT_NONE;
+      if (revSelectedPath !== false) {
+        let len = revSelectedPath.length;
+        while (revSelectedPath[len-1] === 0n) {
+          revSelectedPath.pop();
+          len--;
+        }
+        if (len == 0) {
+          selectionType = Renderer.SELECT_FINAL;
+          revSelectedPath = false;
+        } else {
+          selectionType = len%2 ?  Renderer.SELECT_RIGHT : Renderer.SELECT_LEFT;
+          revSelectedPath[len-1]--;
+        }
+      }
+
+      this.drawNode(
+        node.nodeId, canvasXStart, canvasY, nodeWidth, valueFn(node.state), selectionType);
+
+
+      const canvasYLimit = canvasY + nodeWidth*0.25;
+      if (nodeWidth >= Renderer.MIN_NODE_WIDTH && canvasYLimit <= maxCanvasY) {
+        nodeWidth *= 0.5;
+        const canvasXMid = canvasXStart+nodeWidth;
+        canvasY += nodeWidth*0.75;
+        if (canvasXMid >= 0) {
+          stack.push([node.clone().goToLeftChild(),  canvasXStart, canvasY, nodeWidth,
+            selectionType === Renderer.SELECT_LEFT && revSelectedPath]);
+        }
+        if (canvasXMid < maxCanvasX) {
+          stack.push([node.clone().goToRightChild(), canvasXMid,   canvasY, nodeWidth,
+            selectionType === Renderer.SELECT_RIGHT && revSelectedPath]);
+        }
+      }
+    }
   }
 }
 

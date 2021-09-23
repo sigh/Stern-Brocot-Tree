@@ -188,12 +188,13 @@ class NodeInfoView {
 }
 
 const setUpDebug = (tree) => {
-  let debugDiv = document.getElementById('debug-info');
-  let treeView = tree._tree;
+  const debugDiv = document.getElementById('debug-info');
+  const renderer = tree._renderer;
+  const treeViewport = tree._treeViewport;
 
   tree.addEventListener( 'update', () => {
-    const counters = JSON.stringify(treeView.counters).replaceAll('"', '');
-    debugDiv.textContent = counters + ' ' + tree._treeViewport.referenceNode().depth();
+    const counters = JSON.stringify(renderer.counters).replaceAll('"', '');
+    debugDiv.textContent = counters + ' ' + treeViewport.referenceNode().depth();
   });
 };
 
