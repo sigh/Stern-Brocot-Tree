@@ -1,19 +1,10 @@
 class RLEInteger {
-  static ONE = (() => {
-    let a = new RLEInteger([1n]);
-    a.freeze();
-    return a;
-  })();
-
   #rle;
   #size;
-  #bigint;
 
-  constructor(rle, size, bigint) {
+  constructor(rle, size) {
     if (rle === undefined) {
       rle = [];
-      size = 0n;
-      bigint = 0n;
     }
     this.#rle = rle;
 
@@ -21,26 +12,10 @@ class RLEInteger {
       size = this.#rle.reduce((a,b) => a+b, 0n);
     }
     this.#size = size;
-
-    this.#bigint = bigint;
   }
 
   clone() {
-    return new RLEInteger(this.#rle.slice(), this.#size, this.#bigint);
-  }
-
-  freeze() {
-    this.appendBit = undefined;
-    this.rightShift = undefined;
-    this.reverse = undefined;
-  }
-
-  normalize() {
-    // Truncate fom the front until the leading bit in a 1.
-    while (this.#rle.length && this.#rle[0] == 0n) {
-      this.#rle.shift();
-      this.#size -= this.#rle.shift() || 0n;
-    }
+    return new RLEInteger(this.#rle.slice(), this.#size);
   }
 
   copyRLE() {
@@ -72,97 +47,66 @@ class RLEInteger {
   }
 
   toBigInt() {
-    if (this.#bigint === undefined) {
-      const rle = this.#rle;
+    const rle = this.#rle;
 
-      // TODO: Go from opposite direction.
-      let isOne = true;
-      let bigint = 0n;
-      for (let j = 0; j < rle.length; j++) {
-        bigint <<= rle[j];
-        if (isOne) bigint |= (1n << rle[j])-1n;
+    let isOne = true;
+    let bigint = 0n;
+    for (let j = 0; j < rle.length; j++) {
+      bigint <<= rle[j];
+      if (isOne) bigint |= (1n << rle[j])-1n;
 
-        isOne = !isOne;
-      }
-
-      this.#bigint = bigint;
+      isOne = !isOne;
     }
 
-    return this.#bigint;
+    return bigint;
   }
 
-  numLeadingOnes() {
-    return this.#size ? this.#rle[0] : 0n;
-  }
   lastBit() {
     return this.#rle.length&1;
   }
 
-  // TODO: Fix so that this is just hte same as checking size.
-  isZero() {
-    if (this.#size == 0) return true;
-    if (this.#rle[0] > 0n) return false;
-    return this.#rle.length <= 2;
-  }
-
-  appendBit(b, n) {
-    if (n === 0n) return;
-
-    let rle = this.#rle;
+  appendBit(b) {
+    const rle = this.#rle;
 
     if (rle.length == 0) rle.push(0n);
 
-    if (b == rle.length%2) {
-      rle[rle.length-1] += n;
+    if (b == this.lastBit()) {
+      rle[rle.length-1]++;
     } else {
-      rle.push(n);
+      rle.push(1n);
     }
-    this.#size += n;
-    this.#bigint = undefined;
+
+    this.#size++;
   }
 
   rightShift(n) {
-    if (n >= this.#size) {
+    if (this.#size <= n) {
+      this.#size = 0;
       this.#rle = [];
-      this.#size = 0n;
-      this.#bigint = 0n;
       return;
     }
 
     this.#size -= n;
-    this.#bigint = undefined;
 
-    let rle = this.#rle;
-    while (n > 0) {
-      const lastValue = rle[rle.length-1]
-      if (lastValue <= n) {
-        n -= lastValue;
-        rle.pop();
-      } else {
-        rle[rle.length-1] -= n;
-        n = 0n;
-      }
-    }
+    const rle = this.#rle;
+
+    while (n > 0) n -= rle.pop();
+    if (n < 0) rle.push(-n);
   }
 
-  reverse(padToSize) {
-    let rle = this.#rle;
+  reverse() {
+    const rle = this.#rle;
+    if (!rle.length) return;
 
-    const leadingZeros = padToSize > this.#size ? padToSize - this.#size : 0n;
+    // Make sure the path ends in an R-count.
+    if (this.lastBit() == 0) rle.push(0n);
 
-    // Remove all trailing 0s or 0 bits).
-    while (rle.length && (rle[rle.length-1] === 0n || rle.length%2 == 0)) {
-      this.#size -= rle.pop();
-    }
     rle.reverse();
-    // In case there were any leading 0s.
-    while (rle.length && (rle[rle.length-1] === 0n)) {
-      rle.pop();
-    }
 
-    this.appendBit(0, leadingZeros);
+    // If there was a leading 0, remove it.
+    if (rle[rle.length-1] == 0) rle.pop();
 
-    this.#bigint = undefined;
+    return;
   }
 
   suffix(n) {
@@ -179,9 +123,12 @@ class RLEInteger {
 
     let rle;
     if (i%2==0) {
-      // We've finished on z 0 section, so truncate them all.
-      rle = this.#rle.slice(i);
+      // We've finished on 0, so add a leading 1.
+      rle = this.#rle.slice(i-2);
+      rle[0] = 0n;
+      rle[1] = -remaining;
     } else {
+      // We've finished on a 1, so just add the remaining bits.
       rle = this.#rle.slice(i-1);
       rle[0] = -remaining;
     }
@@ -203,140 +150,50 @@ class RLEInteger {
     return other.#rle[i] <= this.#rle[i];
   }
 
-  static cmp(a, b) {
-    if (a.#size > b.#size) return 1;
-    if (a.#size < b.#size) return -1;
+  equals(other) {
+    if (this.#rle.length != other.#rle.length) return false;
 
     // Same number of bits - find first difference.
-    for (let i = 0; i < a.#rle.length; i++) {
-      if (a.#rle[i] > b.#rle[i]) return i%2 ? -1 :  1;
-      if (a.#rle[i] < b.#rle[i]) return i%2 ?  1 : -1;
+    for (let i = 0; i < this.#rle.length; i++) {
+      if (this.#rle[i] !== other.#rle[i]) return false;
     }
 
-    // Numbers are the same.
-    return 0;
+    return true;
   }
 
-  // Add positive numbers.
-  static add(a, b) {
-    let r = a.#rle.slice();
-    let q = b.#rle.slice();
-
-    let result = new RLEInteger();
-
-    r.reverse();
-    q.reverse();
-
-    const sizeDiff = a.#size - b.#size;
-    if (sizeDiff < 0) {
-      r.push(-sizeDiff);
-      r.push(0n);
-    } else if (sizeDiff > 0) {
-      q.push(sizeDiff);
-      q.push(0n);
-    }
-
-    let carry = 0;
-    while (r.length && q.length) {
-      // Choose the smaller value, and subtract it from both.
-      const v = r[0] < q[0] ? r[0] : q[0];
-      r[0] -= v;
-      q[0] -= v;
-
-      // Figure out the current values of the bits.
-      let bitSum = r.length%2 + q.length%2;
-
-      if (bitSum == 0) {
-        result.appendBit(carry, 1n);
-        result.appendBit(bitSum, v-1n);
-        carry = 0;
-      } else if (bitSum == 1) {
-        result.appendBit(1-carry, v);
-        // carry remains.
-      } else {
-        result.appendBit(carry, 1n);
-        result.appendBit(1, v-1n);
-        carry = 1;
-      }
-
-      // Remove the used up entries.
-      if (r[0] == 0) r.shift();
-      if (q[0] == 0) q.shift();
-    }
-
-    if (carry) {
-      result.appendBit(carry, 1n);
-    }
-
-    result.reverse();
-
-    return result;
+  inc() {
+    this.#adj(1);
+    return this;
+  }
+  dec() {
+    this.#adj(0);
+    return this;
   }
 
-  static sub(a, b) {
-    switch (this.cmp(a, b)) {
-      case 0:
-        return [new RLEInteger(), 0];
-      case 1:
-        return [this.#sub(a, b), 1];
-      case -1:
-        return [this.#sub(b, a), -1];
-    }
-  }
+  #adj(bit) {
+    const rle = this.#rle;
 
-  // Subtract positive numbers where a > b.
-  static #sub(a, b) {
-    let r = a.#rle.slice();
-    let q = b.#rle.slice();
+    // Replace all ab...b with ba...a where a = 1-b;
 
-    let result = new RLEInteger();
-
-    r.reverse();
-    q.reverse();
-
-    const sizeDiff = a.#size - b.#size;
-    if (sizeDiff < 0) {
-      r.push(-sizeDiff);
-      r.push(0n);
-    } else if (sizeDiff > 0) {
-      q.push(sizeDiff);
-      q.push(0n);
+    // Remove the trailing bs.
+    let bs = 0n;
+    if (this.lastBit() == bit) {
+      bs = rle.pop();
     }
 
-    let borrow = 0;
-    while (r.length && q.length) {
-      // Choose the smaller value, and subtract it from both.
-      const v = r[0] < q[0] ? r[0] : q[0];
-      r[0] -= v;
-      q[0] -= v;
+    if (rle.length == 0) throw('Edge of layer');
 
-      // Figure out the current values of the bits.
-      let bitSum = r.length%2 - q.length%2;
-
-      if (bitSum == 1) {
-        result.appendBit(1-borrow, 1n);
-        result.appendBit(bitSum, v-1n);
-        borrow = 0;
-      } else if (bitSum == 0) {
-        result.appendBit(borrow, v);
-      } else if (bitSum == -1) {
-        result.appendBit(1-borrow, 1n);
-        result.appendBit(0, v-1n);
-        borrow = 1;
-      }
-
-      // Remove the used up entries.
-      if (r[0] == 0) r.shift();
-      if (q[0] == 0) q.shift();
+    // Replace the last !b with a b.
+    const as = rle.pop()-1n;
+    if (as > 0) {
+      rle.push(as, 1n);
+    } else {
+      if (!rle.length) rle.push(0n, 0n);
+      rle[rle.length-1]++;
     }
 
-    result.reverse();
-
-    if (borrow) {
-      throw('subtraction result is negative: ' +  result);
-    }
-
-    return result;
+    // Add the bs number of a.
+    if (bs) rle.push(bs);
   }
 }
 

@@ -75,21 +75,14 @@ class TreeState {
 
 class NodeId {
 
-  static ONE = new NodeId(RLEInteger.fromBigInt(0n), 0n);
+  static ONE = new NodeId(new RLEInteger());
 
-  constructor(rleint, depth) {
-    this._depth = depth;
+  constructor(rleint) {
     this._rleint = rleint;
   }
 
-  static fromRLEInteger(rleint, depth) {
-    return new NodeId(rleint, depth);
-  }
-
-  static _normalizeRle(rle) {
-    while (rle.length && rle[rle.length-1] == 0) rle.pop();
-    if (!rle.length) rle.push(0n);
-    return rle;
+  static fromRLEInteger(rleint) {
+    return new NodeId(rleint);
   }
 
   static fromContinuedFraction(treeType, cf) {
@@ -100,25 +93,17 @@ class NodeId {
     const depth = rle.reduce((a,b) => a+b);
 
     const rleint = new RLEInteger(rle);
-    rleint.normalize();
 
     // The Calkin-Wilf tree has the reverse path.
     if (treeType == 'calkin-wilf') {
-      rleint.reverse(depth);
+      rleint.reverse();
     }
 
-    return NodeId.fromRLEInteger(rleint, depth);
+    return NodeId.fromRLEInteger(rleint);
   }
 
   getPath() {
-    let rle = this._rleint.copyRLE();
-
-    // Add leading left turns.
-    if (this._depth > this._rleint.size()) {
-      rle.unshift(0n, this._depth - this._rleint.size());
-    }
-
-    return rle;
+    return this._rleint.copyRLE();
   }
 
   getRLEInteger() {
@@ -127,55 +112,39 @@ class NodeId {
 
   leftChild() {
     let rleint = this._rleint.clone();
-    rleint.appendBit(0, 1n);
-    return NodeId.fromRLEInteger(rleint, this._depth+1n);
+    rleint.appendBit(0);
+    return NodeId.fromRLEInteger(rleint);
   }
   rightChild() {
     let rleint = this._rleint.clone();
-    rleint.appendBit(1, 1n);
-    return NodeId.fromRLEInteger(rleint, this._depth+1n);
+    rleint.appendBit(1);
+    return NodeId.fromRLEInteger(rleint);
   }
-  nthParent(n) {
-    const newDepth = this._depth-n;
-    if (newDepth < 0n) throw('Negative depth');
+  parent() {
+    if (this.depth() == 0) throw('Already at top of tree.');
 
-    let rleint = this._rleint.clone();
-    rleint.rightShift(n);
+    const rleint = this._rleint.clone();
+    rleint.rightShift(1n);
 
-    return NodeId.fromRLEInteger(rleint, newDepth);
+    return NodeId.fromRLEInteger(rleint);
   }
   isRightChild() {
     const rleint = this._rleint;
-    if (rleint.size() == 0) return false;
     return rleint.lastBit() == 1;
   }
 
   next() {
-    const nextRLEInt = RLEInteger.add(this._rleint, RLEInteger.ONE);
-    return NodeId.fromRLEInteger(nextRLEInt, this._depth);
+    return NodeId.fromRLEInteger(this._rleint.clone().inc());
   }
   prev() {
-    const nextRLEInt = RLEInteger.sub(this._rleint, RLEInteger.ONE)[0];
-    return NodeId.fromRLEInteger(nextRLEInt, this._depth);
+    return NodeId.fromRLEInteger(this._rleint.clone().dec());
   }
 
-  isLastNode() {
-    // The result must be either 0 or all 1s.
-    return this._depth == this._rleint.numLeadingOnes();
-  }
-  isFirstNode() {
-    return this._rleint.isZero();
-  }
-
-  depth() { return this._depth; }
-  index() {
-    return this._rleint.toBigInt();
-  }
+  depth() { return this._rleint.size(); }
 
   equals(other) {
     return (other
-         && this._depth == other._depth
-         && 0 === RLEInteger.cmp(this._rleint, other._rleint));
+         && this._rleint.equals(other._rleint));
   }
 
   relativeNodeTo(other) {
@@ -184,11 +153,7 @@ class NodeId {
 
     const n = other.depth() - this.depth();
     const rleint = other._rleint.suffix(n);
-    return NodeId.fromRLEInteger(rleint, n);
-  }
-
-  toString() {
-    return this.depth() + ': ' + this.index();
+    return NodeId.fromRLEInteger(rleint);
   }
 }
 
@@ -229,14 +194,16 @@ class NodeIdAndState {
     return this.nodeId.isRightChild();
   }
   isFirstNode() {
-    return this.nodeId.isFirstNode();
+    // m0/n0 = 0/1
+    return this.state.m0 == 0;
   }
   isLastNode() {
-    return this.nodeId.isLastNode();
+    // m1/n1 = 1/0
+    return this.state.n1 == 0;
   }
 
   goToParent() {
-    this.nodeId = this.nodeId.nthParent(1n);
+    this.nodeId = this.nodeId.parent();
     this.state.goToParent();
     return this;
   }
@@ -540,15 +507,12 @@ class Renderer {
 
       let canvasXStart = this._treeViewport.xStart();
       while (canvasXStart < this._canvas.width) {
-        let revSelectedPath = false;
+        let revSelectedPath = null;
         const relativeSelectedNodeId = node.nodeId.relativeNodeTo(selectedNodeId);
         if (relativeSelectedNodeId) {
-          const path = relativeSelectedNodeId.getPath();
-
           // Reverse the path so that we can efficiently keep truncating it.
-          if (path.length%2==0) path.push(0n);
-          path.reverse();
-          revSelectedPath = path;
+          revSelectedPath = relativeSelectedNodeId.getRLEInteger().clone();
+          revSelectedPath.reverse();
         }
         stack.push([node.clone(), canvasXStart, canvasY, nodeWidth, revSelectedPath]);
         this.counters.initialNodes++;
@@ -587,18 +551,13 @@ class Renderer {
       this.counters.nodesDrawn++;
 
       let selectionType = Renderer.SELECT_NONE;
-      if (revSelectedPath !== false) {
-        let len = revSelectedPath.length;
-        while (revSelectedPath[len-1] === 0n) {
-          revSelectedPath.pop();
-          len--;
-        }
-        if (len == 0) {
+      if (revSelectedPath) {
+        if (revSelectedPath.size() == 0) {
           selectionType = Renderer.SELECT_FINAL;
-          revSelectedPath = false;
+          revSelectedPath = null;
         } else {
-          selectionType = len%2 ?  Renderer.SELECT_RIGHT : Renderer.SELECT_LEFT;
-          revSelectedPath[len-1]--;
+          selectionType = revSelectedPath.lastBit() ? Renderer.SELECT_RIGHT : Renderer.SELECT_LEFT;
+          revSelectedPath.rightShift(1n);
         }
       }
 

@@ -119,7 +119,7 @@ class NodeInfoView {
 
   _renderIndex(nodeId) {
     let div = document.createElement('div');
-    let rleint = nodeId.getRLEInteger().clone();;
+    let rleint = nodeId.getRLEInteger().clone();
 
     if (nodeId.depth() < 64) {
       const index = rleint.toBigInt() | (1n << nodeId.depth());
