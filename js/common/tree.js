@@ -667,7 +667,7 @@ class TreeViewport extends BaseEventTarget {
 
     // Check if we've moved up enough that we should start at the next layer.
     // Limit scale, so that the initial nodes are not too small.
-    if (viewport.scale > 1 && viewport.origin.v < -this.LAYER_HEIGHT*1.5) {
+    while (viewport.scale > 1 && viewport.origin.v < -this.LAYER_HEIGHT*1.5) {
       this.#referenceNode.goToLeftChild();
 
       // Rescale to the size, keeping the top left corner of the node in the
@@ -681,7 +681,7 @@ class TreeViewport extends BaseEventTarget {
     // Obviously, avoid going above the above the first node.
     //   Also do this if our scale is too small, to stay within reasonable
     //   bounds.
-    if (this.#referenceNode.depth() > 0 && (
+    while (this.#referenceNode.depth() > 0 && (
         (viewport.scale < 0.2 || viewport.origin.v > -this.LAYER_HEIGHT))) {
       const isRightChild = this.#referenceNode.isRightChild();
       this.#referenceNode.goToParent();
@@ -699,13 +699,13 @@ class TreeViewport extends BaseEventTarget {
 
     // Check if we've moved far left enough that we need to go to the next
     // sibling.
-    if (!this.#referenceNode.isLastNode() && viewport.origin.u > this.LAYER_WIDTH) {
+    while (!this.#referenceNode.isLastNode() && viewport.origin.u > this.LAYER_WIDTH) {
       this.#referenceNode.goToNextSibling();
       this.#viewport.origin.u -= this.LAYER_WIDTH;
     }
     // Check if we've moved right right enough that we need to go to the next
     // sibling.
-    if (!this.#referenceNode.isFirstNode() && viewport.origin.u < 0) {
+    while (!this.#referenceNode.isFirstNode() && viewport.origin.u < 0) {
       this.#referenceNode.goToPrevSibling();
       this.#viewport.origin.u += this.LAYER_WIDTH;
     }
@@ -754,12 +754,6 @@ class TreeViewport extends BaseEventTarget {
 
     this.#focusOnReferenceNode();
 
-    // Go up enough until the entire tree is visible.
-    let ref;
-    do {
-      ref = this.#referenceNode.nodeId;
-      this.#maybeUpdateReferenceNode();
-    } while(ref !== this.#referenceNode.nodeId);
     this.#update();
   }
 
