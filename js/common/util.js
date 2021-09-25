@@ -74,11 +74,11 @@ class BaseEventTarget {
 class SimpleSpatialIndex {
   static SLOT_MOD = (1<<8)-1;
 
-  #bucketSize;
-  #rows;
-  #cols;
-  #grid;
-  #slots = [];
+  _bucketSize;
+  _rows;
+  _cols;
+  _grid;
+  _slots = [];
 
   static Item = class {
     obj = null;
@@ -90,32 +90,32 @@ class SimpleSpatialIndex {
   }
 
   constructor(width, height, bucketSize) {
-    this.#bucketSize = bucketSize;
-    this.#rows = Math.ceil(width/bucketSize);
-    this.#cols = Math.ceil(height/bucketSize);
-    this.#grid = new Uint8Array(this.#rows*this.#cols);
+    this._bucketSize = bucketSize;
+    this._rows = Math.ceil(width/bucketSize);
+    this._cols = Math.ceil(height/bucketSize);
+    this._grid = new Uint8Array(this._rows*this._cols);
   }
 
   insert(obj, x, y, w, h) {
-    const b = this.#bucketSize;
-    const rows = this.#rows;
-    const cols = this.#cols;
+    const b = this._bucketSize;
+    const rows = this._rows;
+    const cols = this._cols;
 
     const minI = clamp(Math.floor(x/b),    0, rows);
     const maxI = clamp(Math.ceil((x+w)/b), 0, rows);
     const minJ = clamp(Math.floor(y/b),    0, cols);
     const maxJ = clamp(Math.ceil((y+h)/b), 0, cols);
 
-    const slotNum = (this.#slots.length % SimpleSpatialIndex.SLOT_MOD)+1;
-    this.#slots.push(new this.constructor.Item(obj, x, y, x+w, y+h));
+    const slotNum = (this._slots.length % SimpleSpatialIndex.SLOT_MOD)+1;
+    this._slots.push(new this.constructor.Item(obj, x, y, x+w, y+h));
 
     for (let i = minI; i < maxI; i++) {
-      this.#grid.fill(slotNum, i*cols + minJ, i*cols + maxJ);
+      this._grid.fill(slotNum, i*cols + minJ, i*cols + maxJ);
     }
   }
 
-  #objInSlot(x, y, s) {
-    const r = this.#slots[s];
+  _objInSlot(x, y, s) {
+    const r = this._slots[s];
 
     if (x >= r.x0 && y >= r.y0 && x < r.x1 && y < r.y1) return r.obj;
     return undefined;
@@ -123,17 +123,17 @@ class SimpleSpatialIndex {
 
   // Get the node at x,y (first match).
   get(x, y) {
-    const b = this.#bucketSize;
+    const b = this._bucketSize;
 
     const i = Math.floor(x/b);
     const j = Math.floor(y/b);
 
-    let slotNum = this.#grid[i*this.#cols+j];
+    let slotNum = this._grid[i*this._cols+j];
     if (!slotNum) return undefined;
 
     slotNum -= 1;
-    for (let s = slotNum; s < this.#slots.length; s += SimpleSpatialIndex.SLOT_MOD) {
-      const obj = this.#objInSlot(x, y, s);
+    for (let s = slotNum; s < this._slots.length; s += SimpleSpatialIndex.SLOT_MOD) {
+      const obj = this._objInSlot(x, y, s);
       if (obj !== undefined) return obj;
     }
 
@@ -141,6 +141,6 @@ class SimpleSpatialIndex {
   }
 
   size() {
-    return this.#slots.length;
+    return this._slots.length;
   }
 }

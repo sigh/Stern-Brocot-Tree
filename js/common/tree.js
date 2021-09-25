@@ -598,9 +598,9 @@ class Renderer {
 }
 
 class TreeViewport extends BaseEventTarget {
-  #viewport;
+  _viewport;
   // Reference node is the top-left most node of the viewport.
-  #referenceNode;
+  _referenceNode;
 
   LAYER_WIDTH = 100;
   LAYER_HEIGHT = this.LAYER_WIDTH/2;
@@ -609,24 +609,24 @@ class TreeViewport extends BaseEventTarget {
   constructor(viewport) {
     super();
 
-    this.#viewport = viewport;
-    viewport.addEventListener('update', () => this.#update());
+    this._viewport = viewport;
+    viewport.addEventListener('update', () => this._update());
 
     this.resetView();
   }
 
-  #update() {
-    this.#clampPosition();
-    this.#maybeUpdateReferenceNode();
+  _update() {
+    this._clampPosition();
+    this._maybeUpdateReferenceNode();
 
     this.dispatchEvent('update');
   }
 
-  #clampPosition() {
+  _clampPosition() {
     const buffer = 40;
-    const viewport = this.#viewport;
+    const viewport = this._viewport;
 
-    const treeYMin = this.#treeYMin();
+    const treeYMin = this._treeYMin();
     const yMax = viewport.maxCanvasY();
     if (treeYMin < yMax - buffer) {
       const delta = (yMax - buffer)-treeYMin;
@@ -634,87 +634,87 @@ class TreeViewport extends BaseEventTarget {
     }
   }
 
-  #maybeUpdateReferenceNode() {
-    const viewport = this.#viewport;
+  _maybeUpdateReferenceNode() {
+    const viewport = this._viewport;
     const nodeWidth = this.nodeWidth();
 
     // Check if we've moved up enough that we should start at the next layer.
     // Limit scale, so that the initial nodes are not too small.
     while (viewport.scale > 1 && viewport.origin.v < -this.LAYER_HEIGHT*1.5) {
-      this.#referenceNode.goToLeftChild();
+      this._referenceNode.goToLeftChild();
 
       // Rescale to the size, keeping the top left corner of the node in the
       // same place.
       viewport.rescale(0.5, this.xStart(), this.yStart());
       // The child is now in the parent's place, so adjust accordingly.
-      this.#viewport.origin.v += this.LAYER_HEIGHT;
+      this._viewport.origin.v += this.LAYER_HEIGHT;
     }
 
     // Check if we've moved down enough that we need to display the parent.
     // Obviously, avoid going above the above the first node.
     //   Also do this if our scale is too small, to stay within reasonable
     //   bounds.
-    while (this.#referenceNode.depth() > 0 && (
+    while (this._referenceNode.depth() > 0 && (
         (viewport.scale < 0.2 || viewport.origin.v > -this.LAYER_HEIGHT))) {
-      const isRightChild = this.#referenceNode.isRightChild();
-      this.#referenceNode.goToParent();
+      const isRightChild = this._referenceNode.isRightChild();
+      this._referenceNode.goToParent();
 
       // Rescale to the size, keeping the top left corner of the node in the
       // same place.
       viewport.rescale(2, this.xStart(), this.yStart());
       // The parent is now where the child was, so adjust.
-      this.#viewport.origin.v -= this.LAYER_HEIGHT*0.5;
+      this._viewport.origin.v -= this.LAYER_HEIGHT*0.5;
       // If it was a right child, the start needs to be shifted also.
       if (isRightChild) {
-        this.#viewport.origin.u += this.LAYER_WIDTH*0.5;
+        this._viewport.origin.u += this.LAYER_WIDTH*0.5;
       }
     }
 
     // Check if we've moved far left enough that we need to go to the next
     // sibling.
-    while (!this.#referenceNode.isLastNode() && viewport.origin.u > this.LAYER_WIDTH) {
-      this.#referenceNode.goToNextSibling();
-      this.#viewport.origin.u -= this.LAYER_WIDTH;
+    while (!this._referenceNode.isLastNode() && viewport.origin.u > this.LAYER_WIDTH) {
+      this._referenceNode.goToNextSibling();
+      this._viewport.origin.u -= this.LAYER_WIDTH;
     }
     // Check if we've moved right right enough that we need to go to the next
     // sibling.
-    while (!this.#referenceNode.isFirstNode() && viewport.origin.u < 0) {
-      this.#referenceNode.goToPrevSibling();
-      this.#viewport.origin.u += this.LAYER_WIDTH;
+    while (!this._referenceNode.isFirstNode() && viewport.origin.u < 0) {
+      this._referenceNode.goToPrevSibling();
+      this._viewport.origin.u += this.LAYER_WIDTH;
     }
   }
 
-  #treeYMin() {
-    return this.#viewport.toCanvasY(this.LAYER_HEIGHT*2);
+  _treeYMin() {
+    return this._viewport.toCanvasY(this.LAYER_HEIGHT*2);
   }
   treeVisible() {
-    return this.#treeYMin() > 0;
+    return this._treeYMin() > 0;
   }
 
   referenceNode() {
-    return this.#referenceNode.clone();
+    return this._referenceNode.clone();
   }
 
   // Return the min x for a node in canvas coordinates.
   xStart() {
-    return this.#viewport.toCanvasX(0);
+    return this._viewport.toCanvasX(0);
   }
 
   nodeWidth() {
-    const viewport = this.#viewport;
+    const viewport = this._viewport;
     return this.LAYER_WIDTH*viewport.scale;
   }
 
   yStart() {
-    return this.#viewport.toCanvasY(this.LAYER_WIDTH*0.5);
+    return this._viewport.toCanvasY(this.LAYER_WIDTH*0.5);
   }
 
-  static #SPATIAL_INDEX_BUCKET_SIZE = 10;
+  static _SPATIAL_INDEX_BUCKET_SIZE = 10;
   resetSpatialIndex() {
-    this.#viewport.resetSpatialIndex(this.constructor.#SPATIAL_INDEX_BUCKET_SIZE);
+    this._viewport.resetSpatialIndex(this.constructor._SPATIAL_INDEX_BUCKET_SIZE);
   }
   addToIndex(...args) {
-    this.#viewport.addToIndex(...args);
+    this._viewport.addToIndex(...args);
   }
 
   resetView() {
@@ -722,16 +722,16 @@ class TreeViewport extends BaseEventTarget {
   }
   moveToNodeId(node) {
     // Focus on parent so we have context.
-    this.#referenceNode = NodeIdAndState.fromNodeId(node);
-    if (this.#referenceNode.depth()) this.#referenceNode.goToParent();
+    this._referenceNode = NodeIdAndState.fromNodeId(node);
+    if (this._referenceNode.depth()) this._referenceNode.goToParent();
 
-    this.#focusOnReferenceNode();
+    this._focusOnReferenceNode();
 
-    this.#update();
+    this._update();
   }
 
-  #focusOnReferenceNode() {
-    const viewport = this.#viewport;
+  _focusOnReferenceNode() {
+    const viewport = this._viewport;
 
     const width = viewport.maxCanvasX();
     const height = viewport.maxCanvasY();
@@ -758,41 +758,41 @@ class Viewport extends BaseEventTarget {
   // Larger scale = more zoomed in.
   scale = 1;
 
-  #canvas;
-  #dragDistance;
-  #spatialIndex;
+  _canvas;
+  _dragDistance;
+  _spatialIndex;
 
   constructor(canvas) {
     super();
 
-    this.#canvas = canvas;
+    this._canvas = canvas;
 
-    this.#setUpMouseWheel(canvas);
-    this.#setUpMouseDrag(canvas);
-    this.#setUpMouseMove(canvas);
-    this.#setUpMouseClick(canvas);
+    this._setUpMouseWheel(canvas);
+    this._setUpMouseDrag(canvas);
+    this._setUpMouseMove(canvas);
+    this._setUpMouseClick(canvas);
 
-    this.#dragDistance = 0;
+    this._dragDistance = 0;
 
-    this.#spatialIndex = null;
+    this._spatialIndex = null;
   }
 
-  #setUpMouseClick(canvas) {
+  _setUpMouseClick(canvas) {
     canvas.onclick = (e) => {
-      if (this.#dragDistance <= 1) {
+      if (this._dragDistance <= 1) {
         this.dispatchEvent('click');
       }
     };
   }
 
-  #setUpMouseMove(canvas) {
+  _setUpMouseMove(canvas) {
     canvas.onmousemove = (e) => {
-      const coord = this.#clientXYToCoord(e.clientX, e.clientY);
+      const coord = this._clientXYToCoord(e.clientX, e.clientY);
       this.dispatchEvent('mousemove', coord);
     };
   }
 
-  #setUpMouseDrag(canvas) {
+  _setUpMouseDrag(canvas) {
     let dragPos = {x: 0, y:0};
     let origin = this.origin;
 
@@ -800,21 +800,21 @@ class Viewport extends BaseEventTarget {
       e.preventDefault();
       const dx = e.clientX - dragPos.x;
       const dy = e.clientY - dragPos.y;
-      this.#dragDistance += Math.abs(dx) + Math.abs(dy);  // Manhatten distance.
+      this._dragDistance += Math.abs(dx) + Math.abs(dy);  // Manhatten distance.
       const du = dx / this.scale;
       const dv = dy / this.scale;
       origin.u -= du;
       origin.v += dv;
       dragPos.x = e.clientX;
       dragPos.y = e.clientY;
-      this.#update();
+      this._update();
     };
 
     canvas.onmousedown = (e) => {
       e.preventDefault();
       dragPos.x = e.clientX;
       dragPos.y = e.clientY;
-      this.#dragDistance = 0;
+      this._dragDistance = 0;
       document.addEventListener('mousemove', mouseMoveHandler);
       let mouseUpHandler = () => {
         document.removeEventListener('mousemove', mouseMoveHandler);
@@ -839,41 +839,41 @@ class Viewport extends BaseEventTarget {
     origin.v += canvasY/this.scale;
   }
 
-  #setUpMouseWheel(canvas) {
+  _setUpMouseWheel(canvas) {
     canvas.onwheel = (e) => {
       e.preventDefault();
 
       // Clamp the delta, and ensure that we don't zoom out too far.
       const ds = Math.pow(2, clamp(e.deltaY * 0.01, -0.5, 0.5));
 
-      const canvasOrigin = this.#canvasOrigin();
+      const canvasOrigin = this._canvasOrigin();
       const canvasX = e.clientX - canvasOrigin.x;
       const canvasY = e.clientY - canvasOrigin.y;
 
       this.rescale(ds, canvasX, canvasY);
 
-      this.#update();
+      this._update();
     };
   }
 
   resetSpatialIndex(bucketSize) {
-    this.#spatialIndex = new SimpleSpatialIndex(
-      this.#canvas.width,
-      this.#canvas.height,
+    this._spatialIndex = new SimpleSpatialIndex(
+      this._canvas.width,
+      this._canvas.height,
       bucketSize);
   }
 
   addToIndex(nodeId, x, y, w, h) {
-    if (this.#spatialIndex) {
-      this.#spatialIndex.insert(nodeId, x, y, w, h);
+    if (this._spatialIndex) {
+      this._spatialIndex.insert(nodeId, x, y, w, h);
     }
   }
 
   maxCanvasX() {
-    return this.#canvas.width;
+    return this._canvas.width;
   }
   maxCanvasY() {
-    return this.#canvas.height;
+    return this._canvas.height;
   }
 
   toCanvasX(u) {
@@ -890,23 +890,23 @@ class Viewport extends BaseEventTarget {
     return canvasY/this.scale - this.origin.v;
   }
 
-  #canvasOrigin() {
-    const bb = this.#canvas.getBoundingClientRect();
+  _canvasOrigin() {
+    const bb = this._canvas.getBoundingClientRect();
     return {x: bb.x, y: bb.y};
   }
 
-  #update() {
+  _update() {
     this.dispatchEvent('update');
   }
 
-  #clientXYToCoord(clientX, clientY) {
-    const canvasOrigin = this.#canvasOrigin();
+  _clientXYToCoord(clientX, clientY) {
+    const canvasOrigin = this._canvasOrigin();
     const canvasX = clientX - canvasOrigin.x;
     const canvasY = clientY - canvasOrigin.y;
 
     let obj;
-    if (this.#spatialIndex) {
-      obj = this.#spatialIndex.get(canvasX, canvasY);
+    if (this._spatialIndex) {
+      obj = this._spatialIndex.get(canvasX, canvasY);
     }
 
     return {x: this.fromCanvasX(this.scale*canvasX),

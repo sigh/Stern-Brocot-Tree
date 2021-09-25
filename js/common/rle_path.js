@@ -1,32 +1,32 @@
 class RLEPath {
-  #rle;
-  #size;
+  _rle;
+  _size;
 
   constructor(rle, size) {
     if (rle === undefined) {
       rle = [];
     }
-    this.#rle = rle;
+    this._rle = rle;
 
     if (size === undefined) {
-      size = this.#rle.reduce((a,b) => a+b, 0n);
+      size = this._rle.reduce((a,b) => a+b, 0n);
     }
-    this.#size = size;
+    this._size = size;
   }
 
   clone() {
-    return new RLEPath(this.#rle.slice(), this.#size);
+    return new RLEPath(this._rle.slice(), this._size);
   }
 
   *items() {
-    const rle = this.#rle;
+    const rle = this._rle;
     for (let i = 0; i < rle.length; i++) {
       yield [i&1, rle[i]];
     }
   }
 
   size() {
-    return this.#size;
+    return this._size;
   }
 
   static fromBigInt(n) {
@@ -50,7 +50,7 @@ class RLEPath {
   }
 
   toBigInt() {
-    const rle = this.#rle;
+    const rle = this._rle;
 
     let isOne = true;
     let bigint = 0n;
@@ -65,11 +65,11 @@ class RLEPath {
   }
 
   lastBit() {
-    return this.#rle.length&1;
+    return this._rle.length&1;
   }
 
   appendBit(b) {
-    const rle = this.#rle;
+    const rle = this._rle;
 
     if (rle.length == 0) rle.push(0n);
 
@@ -79,26 +79,26 @@ class RLEPath {
       rle.push(1n);
     }
 
-    this.#size++;
+    this._size++;
   }
 
   rightShift(n) {
-    if (this.#size <= n) {
-      this.#size = 0n;
-      this.#rle = [];
+    if (this._size <= n) {
+      this._size = 0n;
+      this._rle = [];
       return;
     }
 
-    this.#size -= n;
+    this._size -= n;
 
-    const rle = this.#rle;
+    const rle = this._rle;
 
     while (n > 0) n -= rle.pop();
     if (n < 0) rle.push(-n);
   }
 
   reverse() {
-    const rle = this.#rle;
+    const rle = this._rle;
     if (!rle.length) return;
 
     // Make sure the path ends in an R-count.
@@ -113,26 +113,26 @@ class RLEPath {
   }
 
   suffix(n) {
-    if (n >= this.#size) return new RLEPath(this.#rle.slice(), this.#size);
+    if (n >= this._size) return new RLEPath(this._rle.slice(), this._size);
     if (n == 0) return new RLEPath();
 
     // Find the index to slice from.
-    let remaining = this.#size-n;
+    let remaining = this._size-n;
     let i = 0;
-    while (i < this.#rle.length && remaining >= 0) {
-      remaining -= this.#rle[i];
+    while (i < this._rle.length && remaining >= 0) {
+      remaining -= this._rle[i];
       i++;
     }
 
     let rle;
     if (i%2==0) {
       // We've finished on 0, so add a leading 1.
-      rle = this.#rle.slice(i-2);
+      rle = this._rle.slice(i-2);
       rle[0] = 0n;
       rle[1] = -remaining;
     } else {
       // We've finished on a 1, so just add the remaining bits.
-      rle = this.#rle.slice(i-1);
+      rle = this._rle.slice(i-1);
       rle[0] = -remaining;
     }
 
@@ -140,41 +140,41 @@ class RLEPath {
   }
 
   hasPrefix(other) {
-    if (other.#size > this.#size) return false;
-    if (other.#size === 0n) return true;
+    if (other._size > this._size) return false;
+    if (other._size === 0n) return true;
 
     // Ensure all the digits before last one are equal.
     let i = 0;
-    for (; i < other.#rle.length-1; i++) {
-      if (other.#rle[i] != this.#rle[i]) return false;
+    for (; i < other._rle.length-1; i++) {
+      if (other._rle[i] != this._rle[i]) return false;
     }
 
     // The last digit can be less than or equal.
-    return other.#rle[i] <= this.#rle[i];
+    return other._rle[i] <= this._rle[i];
   }
 
   equals(other) {
-    if (this.#rle.length != other.#rle.length) return false;
+    if (this._rle.length != other._rle.length) return false;
 
     // Same number of bits - find first difference.
-    for (let i = 0; i < this.#rle.length; i++) {
-      if (this.#rle[i] !== other.#rle[i]) return false;
+    for (let i = 0; i < this._rle.length; i++) {
+      if (this._rle[i] !== other._rle[i]) return false;
     }
 
     return true;
   }
 
   inc() {
-    this.#adj(1);
+    this._adj(1);
     return this;
   }
   dec() {
-    this.#adj(0);
+    this._adj(0);
     return this;
   }
 
-  #adj(bit) {
-    const rle = this.#rle;
+  _adj(bit) {
+    const rle = this._rle;
 
     // Replace all ab...b with ba...a where a = 1-b;
 
