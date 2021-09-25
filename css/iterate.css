@@ -1,0 +1,27 @@
+body {
+  display: flex;
+  flex-direction: row;
+}
+
+canvas {
+  box-shadow: 3px 3px 10px;
+  margin: auto;
+  display: block;
+}
+
+#iterator-vis {
+  box-shadow: 3px 3px 10px;
+  margin: auto;
+  display: block;
+  overflow: hidden;
+}
+
+.iterator-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0px 10px;
+}
+.iterator-item > span:last-child {
+  font-size: 24px;
+}

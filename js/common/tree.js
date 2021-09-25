@@ -81,6 +81,15 @@ class NodeId {
     this._rlepath = rlepath;
   }
 
+  static fromBigInt(n) {
+    const rle = RLEPath.fromBigInt(n);
+    // Remove the leading bit with the tools we have.
+    rle.reverse();
+    rle.rightShift(1n);
+    rle.reverse();
+    return this.fromRLEPath(rle);
+  }
+
   static fromRLEPath(rlepath) {
     return new NodeId(rlepath);
   }
