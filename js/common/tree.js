@@ -333,14 +333,21 @@ class TreeController extends BaseEventTarget {
     this._update();
   }
 
-  selectNodeByContinuedFraction(cf) {
-    const nodeId = NodeId.fromContinuedFraction(this._treeType, cf);
+  selectNodeById(nodeId) {
     this._stickyNodeId = nodeId;
-    if (nodeId) {
-      this._treeViewport.moveToNodeId(nodeId);
-    }
     this._update();
     this.dispatchEvent('selectionChange');
+  }
+
+  selectNodeByContinuedFraction(cf) {
+    const nodeId = NodeId.fromContinuedFraction(this._treeType, cf);
+    this.selectedNodeId(nodeId);
+  }
+
+  moveToSelectedNode() {
+    if (this._stickyNodeId) {
+      this._treeViewport.moveToNodeId(this._stickyNodeId);
+    }
   }
 }
 

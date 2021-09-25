@@ -1,7 +1,7 @@
-class RationalIterator {
+class IterationController {
   _height = 500;
   _width = 250;
-  _itemHeight = 50;
+  ITEM_HEIGHT = 50;
 
   constructor(tree, outerContainer) {
     this._tree = tree;
@@ -31,6 +31,7 @@ class RationalIterator {
 
       const dy = e.deltaY;
       this._offset += dy;
+      if (this._offset > this.ITEM_HEIGHT) this._offset = this.ITEM_HEIGHT;
 
       this._update();
     };
@@ -61,11 +62,10 @@ class RationalIterator {
     return parts.join('');
   }
 
-  _makeItem(index) {
+  _makeItemDiv(nodeId, index) {
     const div = document.createElement('div');
     div.classList.add('iterator-item');
 
-    const nodeId = NodeId.fromBigInt(index);
     const state = NodeIdAndState.fromNodeId(nodeId).state;
 
     const valueFn = TreeState.getValueFn('stern-brocot');
@@ -75,26 +75,41 @@ class RationalIterator {
 
     const pathString = this._pathString(nodeId.getRLEPath());
 
-    div.appendChild(this._makeTextElem('span',
+    const numberDiv = document.createElement('div');
+    numberDiv.appendChild(this._makeTextElem('span',
       `\\(
-        ${index}
-        = ${binaryIndex}_2
+        \\dfrac{${frac[0]}}{${frac[1]}}
         \\to ${pathString}
+        \\to ${binaryIndex}_2
       \\)`));
-    div.appendChild(this._makeTextElem('span',
-      `\\(
-        \\frac{${frac[0]}}{${frac[1]}}
-      \\)`));
-    div.style.height = this._itemHeight;
+    const fadeOut = document.createElement('div');
+    fadeOut.classList.add('fade-out');
+    numberDiv.appendChild(fadeOut);
+
+    div.appendChild(numberDiv);
+
+    div.appendChild(this._makeTextElem('span', index));
+    div.style.height = this.ITEM_HEIGHT;
 
     return div;
+  }
+
+  _makeItem(index) {
+    const nodeId = NodeId.fromBigInt(index);
+    const newItem = this._makeItemDiv(nodeId, index);
+
+    newItem.onmouseover = () => {
+      tree.selectNodeById(NodeId.fromBigInt(index));
+    };
+
+    return newItem;
   }
 
   _update() {
     const newItems = [];
 
     // Add items to the bottom as required.
-    while (this._items.length * this._itemHeight < this._height-this._offset) {
+    while (this._items.length * this.ITEM_HEIGHT < this._height-this._offset) {
       const newItem = this._makeItem(this._minIndex + BigInt(this._items.length));
       newItems.push(newItem);
       this._items.push(newItem);
@@ -102,10 +117,10 @@ class RationalIterator {
     }
 
     // Remove items from the top if required.
-    while (this._offset < -this._itemHeight) {
+    while (this._offset < -this.ITEM_HEIGHT) {
       const item = this._items.shift();
       this._container.removeChild(item);
-      this._offset += this._itemHeight;
+      this._offset += this.ITEM_HEIGHT;
       this._minIndex++;
     }
 
@@ -116,11 +131,11 @@ class RationalIterator {
       newItems.push(newItem);
       this._items.unshift(newItem);
       this._container.prepend(newItem);
-      this._offset -= this._itemHeight;
+      this._offset -= this.ITEM_HEIGHT;
     }
 
     // Remove items from the bottom if required.
-    while ((this._items.length-1) * this._itemHeight > this._height-this._offset) {
+    while ((this._items.length-1) * this.ITEM_HEIGHT > this._height-this._offset) {
       const item = this._items.pop();
       this._container.removeChild(item);
     }
@@ -138,6 +153,6 @@ const initPage = () => {
   tree.resetPosition();
 
   const iteratorDiv = document.getElementById('iterator-vis');
-  new RationalIterator(tree, iteratorDiv);
+  new IterationController(tree, iteratorDiv);
 }
 

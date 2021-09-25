@@ -231,6 +231,7 @@ const setUpControlPanel = (tree) => {
 
     if (cf !== undefined) {
       tree.selectNodeByContinuedFraction(cf);
+      tree.moveToSelectedNode();
     }
 
     return false;
