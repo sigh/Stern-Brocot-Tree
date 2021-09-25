@@ -75,14 +75,14 @@ class TreeState {
 
 class NodeId {
 
-  static ONE = new NodeId(new RLEInteger());
+  static ONE = new NodeId(new RLEPath());
 
-  constructor(rleint) {
-    this._rleint = rleint;
+  constructor(rlepath) {
+    this._rlepath = rlepath;
   }
 
-  static fromRLEInteger(rleint) {
-    return new NodeId(rleint);
+  static fromRLEPath(rlepath) {
+    return new NodeId(rlepath);
   }
 
   static fromContinuedFraction(treeType, cf) {
@@ -92,68 +92,82 @@ class NodeId {
 
     const depth = rle.reduce((a,b) => a+b);
 
-    const rleint = new RLEInteger(rle);
+    const rlepath = new RLEPath(rle);
 
     // The Calkin-Wilf tree has the reverse path.
     if (treeType == 'calkin-wilf') {
-      rleint.reverse();
+      rlepath.reverse();
     }
 
-    return NodeId.fromRLEInteger(rleint);
+    return NodeId.fromRLEPath(rlepath);
   }
 
-  getPath() {
-    return this._rleint.copyRLE();
+  toContinuedFraction(treeType) {
+    if (this.depth() == 0) return [1n];
+
+    let cf = [];
+    for (const [bit, count] of this._rlepath.items()) {
+      cf.push(count);
+    }
+
+    if (treeType == 'calkin-wilf') {
+      if (cf.length%2 == 0) cf.push(0);
+      cf.reverse();
+      if (cf[cf.length-1] == 0) cf.pop();
+    }
+
+    cf[cf.length-1]++;
+    return cf;
   }
 
-  getRLEInteger() {
-    return this._rleint;
+  getRLEPath() {
+    return this._rlepath.clone();
   }
 
   leftChild() {
-    let rleint = this._rleint.clone();
-    rleint.appendBit(0);
-    return NodeId.fromRLEInteger(rleint);
+    let rlepath = this._rlepath.clone();
+    rlepath.appendBit(0);
+    return NodeId.fromRLEPath(rlepath);
   }
   rightChild() {
-    let rleint = this._rleint.clone();
-    rleint.appendBit(1);
-    return NodeId.fromRLEInteger(rleint);
+    let rlepath = this._rlepath.clone();
+    rlepath.appendBit(1);
+    return NodeId.fromRLEPath(rlepath);
   }
   parent() {
     if (this.depth() == 0) throw('Already at top of tree.');
 
-    const rleint = this._rleint.clone();
-    rleint.rightShift(1n);
+    const rlepath = this._rlepath.clone();
+    rlepath.rightShift(1n);
 
-    return NodeId.fromRLEInteger(rleint);
+    return NodeId.fromRLEPath(rlepath);
   }
   isRightChild() {
-    const rleint = this._rleint;
-    return rleint.lastBit() == 1;
+    const rlepath = this._rlepath;
+    return rlepath.lastBit() == 1;
   }
 
   next() {
-    return NodeId.fromRLEInteger(this._rleint.clone().inc());
+    return NodeId.fromRLEPath(this._rlepath.clone().inc());
   }
   prev() {
-    return NodeId.fromRLEInteger(this._rleint.clone().dec());
+    return NodeId.fromRLEPath(this._rlepath.clone().dec());
   }
 
-  depth() { return this._rleint.size(); }
+  depth() { return this._rlepath.size(); }
 
   equals(other) {
     return (other
-         && this._rleint.equals(other._rleint));
+         && this._rlepath.equals(other._rlepath));
   }
 
   relativeNodeTo(other) {
     if (!other) return null;
-    if (!other._rleint.hasPrefix(this._rleint)) return null;
+    if (!other._rlepath.hasPrefix(this._rlepath)) return null;
 
     const n = other.depth() - this.depth();
-    const rleint = other._rleint.suffix(n);
-    return NodeId.fromRLEInteger(rleint);
+    const rlepath = other._rlepath.suffix(n);
+    return NodeId.fromRLEPath(rlepath);
   }
 }
 
@@ -170,12 +184,12 @@ class NodeIdAndState {
     let state = TreeState.initialState();
 
     // Find the path to the node and follow it.
-    const path = nodeId.getPath();
-    for (let j = 0; j < path.length; j++) {
-      if (j%2) {
-        state.goToLeftChild(path[j]);
+    const path = nodeId.getRLEPath();
+    for (const [bit, count] of path.items()) {
+      if (bit) {
+        state.goToLeftChild(count);
       } else {
-        state.goToRightChild(path[j]);
+        state.goToRightChild(count);
       }
     }
 
@@ -511,7 +525,7 @@ class Renderer {
         const relativeSelectedNodeId = node.nodeId.relativeNodeTo(selectedNodeId);
         if (relativeSelectedNodeId) {
           // Reverse the path so that we can efficiently keep truncating it.
-          revSelectedPath = relativeSelectedNodeId.getRLEInteger().clone();
+          revSelectedPath = relativeSelectedNodeId.getRLEPath();
           revSelectedPath.reverse();
         }
         stack.push([node.clone(), canvasXStart, canvasY, nodeWidth, revSelectedPath]);

@@ -8,21 +8,6 @@ class NodeInfoView {
     });
   }
 
-  _toContinuedFraction(rle,treeType) {
-    if (rle.length == 0) return [1];
-
-    let cf = Array.from(rle);
-
-    if (treeType == 'calkin-wilf') {
-      if (cf.length%2 == 0) cf.push(0);
-      cf.reverse();
-      if (cf[cf.length-1] == 0) cf.pop();
-    }
-
-    cf[cf.length-1]++;
-    return cf;
-  }
-
   _makeTextElem(type, text) {
     let elem = document.createElement(type);
     elem.textContent = text;
@@ -83,18 +68,21 @@ class NodeInfoView {
     return container;
   }
 
-  _renderRLE(rle) {
-    let div = document.createElement('div');
+  _renderRLE(rlepath) {
+    const div = document.createElement('div');
 
-    for (let i = 0; i < rle.length; i++) {
-      if (!rle[i]) continue;
-      const letter = 'RL'[i&1];
+    let isEmpty = true;
+    for (const [bit, count] of rlepath.items()) {
+      if (!count) continue;
+      isEmpty = false;
+
+      const letter = 'RL'[bit];
       div.appendChild(this._makeTextElem('span', letter));
-      if (rle[i] > 1) div.appendChild(this._makeTextElem('sup', rle[i]));
+      if (count > 1) div.appendChild(this._makeTextElem('sup', count));
     }
 
     // If there are no elements, then output 'I' for the identity.
-    if (rle.length == 1 && rle[0] == 0) {
+    if (isEmpty) {
       div.appendChild(this._makeTextElem('span', 'I'));
     }
 
@@ -118,11 +106,11 @@ class NodeInfoView {
   }
 
   _renderIndex(nodeId) {
-    let div = document.createElement('div');
-    let rleint = nodeId.getRLEInteger().clone();
+    const div = document.createElement('div');
+    const rlepath = nodeId.getRLEPath();
 
     if (nodeId.depth() < 64) {
-      const index = rleint.toBigInt() | (1n << nodeId.depth());
+      const index = rlepath.toBigInt() | (1n << nodeId.depth());
       div.append(this._makeTextElem('div', index));
     }
     if (nodeId.depth() >= 20) {
@@ -130,11 +118,11 @@ class NodeInfoView {
       const workingPrecision = 64n;
       let shift = nodeId.depth() - workingPrecision;
       if (shift < 0) shift = 0n;
-      rleint.rightShift(shift);
+      rlepath.rightShift(shift);
 
       // index = a * 2**shift + 2**depth.
       //       = 2**shift * (a + 2**(depth-shift))
-      const a = rleint.toBigInt();
+      const a = rlepath.toBigInt();
 
       // index = 2**shift * b
       const b = Number(a) + Math.pow(2, Number(nodeId.depth() - shift));
@@ -164,8 +152,7 @@ class NodeInfoView {
     this._clearContainer();
     if (!nodeId) return;
 
-    const path = nodeId.getPath();
-    const cf = this._toContinuedFraction(path, treeType);
+    const cf = nodeId.toContinuedFraction(treeType);
     const f = MathHelpers.evalContinuedFrac(cf);
 
     let container = this._container;
@@ -179,7 +166,7 @@ class NodeInfoView {
     this._addItem(container, 'Index',
                   this._renderIndex(nodeId));
     this._addItem(container, 'Path',
-                  this._renderRLE(path));
+                  this._renderRLE(nodeId.getRLEPath()));
     this._addItem(container, 'Continued Fraction',
                   this._renderContinuedFraction(cf));
 

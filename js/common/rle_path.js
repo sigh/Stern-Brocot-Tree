@@ -1,4 +1,4 @@
-class RLEInteger {
+class RLEPath {
   #rle;
   #size;
 
@@ -15,11 +15,14 @@ class RLEInteger {
   }
 
   clone() {
-    return new RLEInteger(this.#rle.slice(), this.#size);
+    return new RLEPath(this.#rle.slice(), this.#size);
   }
 
-  copyRLE() {
-    return this.#rle.slice();
+  *items() {
+    const rle = this.#rle;
+    for (let i = 0; i < rle.length; i++) {
+      yield [i&1, rle[i]];
+    }
   }
 
   size() {
@@ -27,8 +30,8 @@ class RLEInteger {
   }
 
   static fromBigInt(n) {
-    if (!n) return new RLEInteger();
-    if (n < 0) throw('RLEInteger must be positive.');
+    if (!n) return new RLEPath();
+    if (n < 0) throw('RLEPath must be from a positive index.');
 
     const str = n.toString(2);
     const strLen = str.length;
@@ -43,7 +46,7 @@ class RLEInteger {
 
       curChar = str[i];
     }
-    return new RLEInteger(rle, BigInt(strLen), n);
+    return new RLEPath(rle, BigInt(strLen), n);
   }
 
   toBigInt() {
@@ -81,7 +84,7 @@ class RLEInteger {
 
   rightShift(n) {
     if (this.#size <= n) {
-      this.#size = 0;
+      this.#size = 0n;
       this.#rle = [];
       return;
     }
@@ -110,8 +113,8 @@ class RLEInteger {
   }
 
   suffix(n) {
-    if (n >= this.#size) return new RLEInteger(this.#rle.slice(), this.#size);
-    if (n == 0) return new RLEInteger();
+    if (n >= this.#size) return new RLEPath(this.#rle.slice(), this.#size);
+    if (n == 0) return new RLEPath();
 
     // Find the index to slice from.
     let remaining = this.#size-n;
@@ -133,12 +136,12 @@ class RLEInteger {
       rle[0] = -remaining;
     }
 
-    return new RLEInteger(rle);
+    return new RLEPath(rle);
   }
 
   hasPrefix(other) {
     if (other.#size > this.#size) return false;
-    if (other.#size == 0) return true;
+    if (other.#size === 0n) return true;
 
     // Ensure all the digits before last one are equal.
     let i = 0;
