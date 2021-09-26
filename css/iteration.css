@@ -16,6 +16,8 @@
   align-items: center;
   margin: 0px 10px;
   height: 50px;
+
+  font-family: 'serif';
 }
 .iterator-item:hover {
   color: #0099ff;
@@ -25,6 +27,9 @@
   overflow: hidden;
   position: relative;
   flex-grow: 1;
+
+  display: flex;
+  align-items: center;
 }
 .iterator-item > span:last-child {
   font-size: 20px;
@@ -38,4 +43,23 @@
   height: 100%;
 
   background-image: linear-gradient(to right, transparent 70%, white 95%);
+}
+
+.path-arrow {
+  padding: 0px 7px;
+}
+
+.frac {
+    display: inline-block;
+    position: relative;
+    vertical-align: middle;
+    letter-spacing: 0.001em;
+    text-align: center;
+}
+.frac > span {
+    display: block;
+    padding: 0.1em;
+}
+.frac span:last-child {
+    border-top: thin solid;
 }

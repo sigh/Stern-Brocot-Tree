@@ -1,3 +1,89 @@
+class IterationRenderer {
+
+  static _makeTextElem(type, text) {
+    let elem = document.createElement(type);
+    elem.textContent = text;
+    return elem;
+  }
+
+  // TODO: combine with path rendering in blah.
+  static _renderRLE(rlepath) {
+    const span = document.createElement('span');
+
+    let isEmpty = true;
+    for (const [bit, count] of rlepath.items()) {
+      if (!count) continue;
+      isEmpty = false;
+
+      const letter = 'RL'[bit];
+      span.appendChild(this._makeTextElem('i', letter));
+      if (count > 1) span.appendChild(this._makeTextElem('sup', count));
+    }
+
+    // If there are no elements, then output 'I' for the identity.
+    if (isEmpty) {
+      span.appendChild(this._makeTextElem('i', 'I'));
+    }
+
+    return span;
+  }
+
+  static _renderFrac(frac) {
+    const div = document.createElement('div');
+    div.className = 'frac';
+    div.append(this._makeTextElem('span', frac[0]));
+    div.append(this._makeTextElem('span', frac[1]));
+    return div;
+  }
+
+  static _renderArrow() {
+    const span = this._makeTextElem('span', '\u2192');
+    span.className = 'path-arrow';
+    return span;
+  }
+
+  static _renderBinaryIndex(index) {
+    const indexSpan = document.createElement('span');
+    const first1 = this._makeTextElem('span', 1);
+    first1.style.color = 'grey'
+    indexSpan.append(first1);
+    indexSpan.append(this._makeTextElem('span'), index.toString(2).substr(1));
+    indexSpan.append(this._makeTextElem('sub', '2'));
+    return indexSpan;
+  }
+
+  static makeItem(nodeId, index) {
+    const div = document.createElement('div');
+    div.classList.add('iterator-item');
+
+    const state = NodeIdAndState.fromNodeId(nodeId).state;
+    const valueFn = TreeState.getValueFn('stern-brocot');
+    const frac = valueFn(state);
+
+    const longSection = document.createElement('div');
+    longSection.append(this._renderFrac(frac));
+
+    const pathStrings = document.createElement('div');
+    pathStrings.append(this._renderArrow());
+    pathStrings.append(this._renderRLE(nodeId.getRLEPath()));
+    pathStrings.append(this._renderArrow());
+
+    pathStrings.append(this._renderBinaryIndex(index));
+    longSection.append(pathStrings);
+
+    const fadeOut = document.createElement('div');
+    fadeOut.classList.add('fade-out');
+    longSection.append(fadeOut);
+
+    div.append(longSection);
+
+    div.append(this._makeTextElem('span', index));
+    div.style.height = this.ITEM_HEIGHT;
+
+    return div;
+  }
+}
+
 class IterationController {
   _height;
   WIDTH = 250;
@@ -39,66 +125,9 @@ class IterationController {
     };
   }
 
-  _makeTextElem(type, text) {
-    let elem = document.createElement(type);
-    elem.textContent = text;
-    return elem;
-  }
-
-  _pathString(rlepath) {
-    const parts = [];
-    let isEmpty = true;
-    for (const [bit, count] of rlepath.items()) {
-      if (!count) continue;
-      isEmpty = false;
-
-      parts.push('RL'[bit]);
-      if (count > 1) parts.push('^', count);
-    }
-
-    // If there are no elements, then output 'I' for the identity.
-    if (isEmpty) {
-      parts.push('I');
-    }
-
-    return parts.join('');
-  }
-
-  _makeItemDiv(nodeId, index) {
-    const div = document.createElement('div');
-    div.classList.add('iterator-item');
-
-    const state = NodeIdAndState.fromNodeId(nodeId).state;
-
-    const valueFn = TreeState.getValueFn('stern-brocot');
-
-    const frac = valueFn(state);
-    const binaryIndex = index.toString(2);
-
-    const pathString = this._pathString(nodeId.getRLEPath());
-
-    const numberDiv = document.createElement('div');
-    numberDiv.appendChild(this._makeTextElem('span',
-      `\\(
-        \\dfrac{${frac[0]}}{${frac[1]}}
-        \\to ${pathString}
-        \\to ${binaryIndex}_2
-      \\)`));
-    const fadeOut = document.createElement('div');
-    fadeOut.classList.add('fade-out');
-    numberDiv.appendChild(fadeOut);
-
-    div.appendChild(numberDiv);
-
-    div.appendChild(this._makeTextElem('span', index));
-    div.style.height = this.ITEM_HEIGHT;
-
-    return div;
-  }
-
   _makeItem(index) {
     const nodeId = NodeId.fromBigInt(index);
-    const newItem = this._makeItemDiv(nodeId, index);
+    const newItem = IterationRenderer.makeItem(nodeId, index);
 
     newItem.onmouseover = () => {
       this._tree.selectNodeById(NodeId.fromBigInt(index));
@@ -143,8 +172,6 @@ class IterationController {
     }
 
     this._container.style.transform = `translateY(${this._offset}px)`;
-
-    MathJax.typeset(newItems);
   }
 }
 
