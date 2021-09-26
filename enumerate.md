@@ -253,7 +253,12 @@ $$
 This is a bijection $$ \mathbb{Q}^+ \to \mathbb{N}^+ $$ which is equivalent to
 traversing the Stern-Brocot tree layer by layer, i.e. a breath-first traversal.
 
-TODO: demo
+<div id="basic-mapping" class="iteration-tree-container">
+  <div id="basic-mapping-iterator" class="iteration-container"></div>
+  <canvas id="basic-mapping-tree" width="500" height="400">
+    Your browser does not support canvas.
+  </canvas>
+</div>
 
 To concisely describe this process, define the matrices:
 

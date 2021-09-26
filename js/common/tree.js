@@ -333,6 +333,10 @@ class TreeController extends BaseEventTarget {
     this._update();
   }
 
+  getHeight() {
+    return this._canvas.height;
+  }
+
   selectNodeById(nodeId) {
     this._stickyNodeId = nodeId;
     this._update();

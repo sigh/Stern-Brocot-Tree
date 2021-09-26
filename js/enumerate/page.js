@@ -1,8 +1,15 @@
 const initPage = () => {
-  let sternBrocotCanvas = document.getElementById('stern-brocot-demo');
-  new TreeController(sternBrocotCanvas);
+  // Initial demo.
+  const sternBrocotDemo = document.getElementById('stern-brocot-demo');
+  new TreeController(sternBrocotDemo);
 
-  let calkinWilfCanvas = document.getElementById('calkin-wilf-demo');
-  let calkinWilf = new TreeController(calkinWilfCanvas);
-  calkinWilf.setTreeType('calkin-wilf');
+  // Show mapping.
+  const basicMappingCanvas = document.getElementById('basic-mapping-tree');
+  const basicMappingTree = new TreeController(basicMappingCanvas);
+  const basicMappingIteratorDiv = document.getElementById('basic-mapping-iterator');
+  new IterationController(basicMappingTree, basicMappingIteratorDiv);
+
+  const calkinWilfDemo = document.getElementById('calkin-wilf-demo');
+  const calkinWilfTree = new TreeController(calkinWilfDemo);
+  calkinWilfTree.setTreeType('calkin-wilf');
 };
