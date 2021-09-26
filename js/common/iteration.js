@@ -118,7 +118,8 @@ class IterationController {
       e.preventDefault();
 
       const dy = e.deltaY;
-      this._offset += dy;
+      // TODO: Check if this scroll direction works regardless of user settings.
+      this._offset -= dy;
       if (this._offset > this.ITEM_HEIGHT) this._offset = this.ITEM_HEIGHT;
 
       this._update();
