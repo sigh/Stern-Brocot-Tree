@@ -7,7 +7,7 @@ class IterationRenderer {
   }
 
   // TODO: combine with path rendering in blah.
-  static _renderRLE(rlepath) {
+  static renderRLE(rlepath) {
     const span = document.createElement('span');
 
     let isEmpty = true;
@@ -28,7 +28,7 @@ class IterationRenderer {
     return span;
   }
 
-  static _renderFrac(frac) {
+  static renderFrac(frac) {
     const div = document.createElement('div');
     div.className = 'frac';
     div.append(this._makeTextElem('span', frac[0]));
@@ -36,13 +36,13 @@ class IterationRenderer {
     return div;
   }
 
-  static _renderArrow() {
-    const span = this._makeTextElem('span', '\u2192');
-    span.className = 'path-arrow';
+  static renderSymbol(symbol) {
+    const span = this._makeTextElem('span', symbol);
+    span.className = 'iterator-symbol';
     return span;
   }
 
-  static _renderBinaryIndex(index) {
+  static renderBinaryIndex(index) {
     const indexSpan = document.createElement('span');
     const first1 = this._makeTextElem('span', 1);
     first1.style.color = 'grey'
@@ -52,33 +52,46 @@ class IterationRenderer {
     return indexSpan;
   }
 
-  static makeItem(nodeId, index) {
+  static renderInteger(n) {
+    return this._makeTextElem('span', n);
+  }
+
+  static renderMatrix(a, b, c, d) {
+    const matrix = document.createElement('div');
+    matrix.className = 'matrix';
+    matrix.append(this._makeTextElem('span', a));
+    matrix.append(this._makeTextElem('span', b));
+    matrix.append(this._makeTextElem('span', c));
+    matrix.append(this._makeTextElem('span', d));
+
+    return matrix;
+  }
+
+  static makeItem(nodeId, index, makeItemFn) {
+    const [longSectionParts, endPart] = makeItemFn(nodeId, index);
+
     const div = document.createElement('div');
     div.classList.add('iterator-item');
 
-    const state = NodeIdAndState.fromNodeId(nodeId).state;
-    const valueFn = TreeState.getValueFn('stern-brocot');
-    const frac = valueFn(state);
-
     const longSection = document.createElement('div');
-    longSection.append(this._renderFrac(frac));
-
-    const pathStrings = document.createElement('div');
-    pathStrings.append(this._renderArrow());
-    pathStrings.append(this._renderRLE(nodeId.getRLEPath()));
-    pathStrings.append(this._renderArrow());
-
-    pathStrings.append(this._renderBinaryIndex(index));
-    longSection.append(pathStrings);
+    for (const part of longSectionParts) {
+      if (Array.isArray(part)) {
+        const div = document.createElement('div');
+        part.forEach(p => div.append(p));
+        longSection.append(div);
+      } else {
+        longSection.append(part);
+      }
+    }
 
     const fadeOut = document.createElement('div');
     fadeOut.classList.add('fade-out');
     longSection.append(fadeOut);
 
     div.append(longSection);
+    div.append(endPart);
 
-    div.append(this._makeTextElem('span', index));
-    div.style.height = this.ITEM_HEIGHT;
+    div.style.height = this._itemHeight;
 
     return div;
   }
@@ -87,10 +100,13 @@ class IterationRenderer {
 class IterationController {
   _height;
   WIDTH = 250;
-  ITEM_HEIGHT = 50;
+  _itemHeight = 50;
 
-  constructor(tree, outerContainer) {
+  constructor(tree, outerContainer, makeItemFn, itemHeight) {
     this._tree = tree;
+    this._makeItemFn = makeItemFn;
+
+    if (itemHeight) this._itemHeight = itemHeight;
 
     this._height = tree.getHeight();
     outerContainer.style.height = this._height + 'px';
@@ -120,7 +136,7 @@ class IterationController {
       const dy = e.deltaY;
       // TODO: Check if this scroll direction works regardless of user settings.
       this._offset -= dy;
-      if (this._offset > this.ITEM_HEIGHT) this._offset = this.ITEM_HEIGHT;
+      if (this._offset > this._itemHeight) this._offset = this._itemHeight;
 
       this._update();
     };
@@ -128,7 +144,8 @@ class IterationController {
 
   _makeItem(index) {
     const nodeId = NodeId.fromBigInt(index);
-    const newItem = IterationRenderer.makeItem(nodeId, index);
+    const newItem = IterationRenderer.makeItem(nodeId, index, this._makeItemFn);
+    newItem.style.height = this._itemHeight + 'px';
 
     newItem.onmouseover = () => {
       this._tree.selectNodeById(NodeId.fromBigInt(index));
@@ -141,7 +158,7 @@ class IterationController {
     const newItems = [];
 
     // Add items to the bottom as required.
-    while (this._items.length * this.ITEM_HEIGHT < this._height-this._offset) {
+    while (this._items.length * this._itemHeight < this._height-this._offset) {
       const newItem = this._makeItem(this._minIndex + BigInt(this._items.length));
       newItems.push(newItem);
       this._items.push(newItem);
@@ -149,10 +166,10 @@ class IterationController {
     }
 
     // Remove items from the top if required.
-    while (this._offset < -this.ITEM_HEIGHT) {
+    while (this._offset < -this._itemHeight) {
       const item = this._items.shift();
       this._container.removeChild(item);
-      this._offset += this.ITEM_HEIGHT;
+      this._offset += this._itemHeight;
       this._minIndex++;
     }
 
@@ -163,11 +180,11 @@ class IterationController {
       newItems.push(newItem);
       this._items.unshift(newItem);
       this._container.prepend(newItem);
-      this._offset -= this.ITEM_HEIGHT;
+      this._offset -= this._itemHeight;
     }
 
     // Remove items from the bottom if required.
-    while ((this._items.length-1) * this.ITEM_HEIGHT > this._height-this._offset) {
+    while ((this._items.length-1) * this._itemHeight > this._height-this._offset) {
       const item = this._items.pop();
       this._container.removeChild(item);
     }

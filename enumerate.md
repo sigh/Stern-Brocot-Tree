@@ -276,6 +276,9 @@ $$
   f\left(\begin{pmatrix} n & n' \\ m & m'\end{pmatrix}\right) = \frac{m+m'}{n+n'}
 $$
 
+TODO: Explain why fractions are in a wierd order. So that I is the identify
+matrix. Also point out that the matrix representation is useful.
+
 With these definitions, the path strings we created above are _equations_ to
 generate a value in the tree!
 Equivalently, we can think of the nodes of the tree being matrices themselves.
@@ -578,6 +581,8 @@ a clever manipulation of matrices we can still use it to get:
 
 Putting it all together we have:
 
+TODO: n = 1 is wrong. It should be n'+n
+
 $$
 
 s(S) = s\left(\begin{pmatrix} n & n' \\ m & m' \end{pmatrix}\right)
@@ -588,7 +593,13 @@ s(S) = s\left(\begin{pmatrix} n & n' \\ m & m' \end{pmatrix}\right)
 \end{cases}
 $$
 
-TODO: Demo
+<div id="matrix-mapping-iteration" class="iteration-tree-container">
+  <div id="matrix-mapping-iterator" class="iteration-container"></div>
+  <canvas id="matrix-mapping-tree" width="500" height="400">
+    Your browser does not support canvas.
+  </canvas>
+</div>
+
 
 We can now iterate over the rationals without having to run the Euclidean
 algorithm each time! However, we need to carry around extra state $$ S $$,

@@ -473,7 +473,7 @@ class Renderer {
   static SELECT_LEFT = 2;
   static SELECT_RIGHT = 3;
 
-  static _PATH_COLOR = '#0000aa';
+  static _PATH_COLOR = '#9900dd';
   static _SELECTED_COLOR = '#0099ff';
   static _SEED_COLOR = 'grey'
 
