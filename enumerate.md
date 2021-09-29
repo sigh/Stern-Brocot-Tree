@@ -779,9 +779,20 @@ Giving a final, simple formula for iterating through the positive rational numbe
 
 $$
   s(q) = \frac{1}{2 \lfloor q \rfloor + 1 - q}
+
+  \quad
+  \text{ or }
+  \quad
+
+  s\left(\frac{a}{b}\right) = \frac{b}{2 b \left\lfloor \frac{a}{b} \right\rfloor + b - a}
 $$
 
-TODO: Demo
+<div id="final-mapping" class="iteration-tree-container">
+  <div id="final-mapping-iterator" class="iteration-container"></div>
+  <canvas id="final-mapping-tree" width="500" height="400">
+    Your browser does not support canvas.
+  </canvas>
+</div>
 
 # Sources
 

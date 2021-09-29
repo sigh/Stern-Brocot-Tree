@@ -55,11 +55,11 @@
     letter-spacing: 0.001em;
     text-align: center;
 }
-.frac > span {
+.frac > div {
     display: block;
     padding: 0.1em;
 }
-.frac span:last-child {
+.frac > div:last-child {
     border-top: thin solid;
 }
 

@@ -31,8 +31,8 @@ class IterationRenderer {
   static renderFrac(frac) {
     const div = document.createElement('div');
     div.className = 'frac';
-    div.append(this._makeTextElem('span', frac[0]));
-    div.append(this._makeTextElem('span', frac[1]));
+    div.append(this._renderArrayAsDiv([frac[0]]));
+    div.append(this._renderArrayAsDiv([frac[1]]));
     return div;
   }
 
@@ -67,22 +67,25 @@ class IterationRenderer {
     return matrix;
   }
 
+  static _renderArrayAsDiv(parts) {
+    const div = document.createElement('div');
+    for (const part of parts) {
+      if (Array.isArray(part)) {
+        div.append(this._renderArrayAsDiv(part));
+      } else {
+        div.append(part);
+      }
+    }
+    return div;
+  }
+
   static makeItem(nodeId, index, makeItemFn) {
     const [longSectionParts, endPart] = makeItemFn(nodeId, index);
 
     const div = document.createElement('div');
     div.classList.add('iterator-item');
 
-    const longSection = document.createElement('div');
-    for (const part of longSectionParts) {
-      if (Array.isArray(part)) {
-        const div = document.createElement('div');
-        part.forEach(p => div.append(p));
-        longSection.append(div);
-      } else {
-        longSection.append(part);
-      }
-    }
+    const longSection = this._renderArrayAsDiv(longSectionParts);
 
     const fadeOut = document.createElement('div');
     fadeOut.classList.add('fade-out');
