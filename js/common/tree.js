@@ -639,6 +639,15 @@ class TreeViewport extends BaseEventTarget {
     this._clampPosition();
     this._maybeUpdateReferenceNode();
 
+    // Don't allow zooming out too far.
+    const viewport = this._viewport;
+    if (this._referenceNode.depth() == 0
+        && this.nodeWidth() < viewport.maxCanvasY() * this.DEFAULT_TREE_HEIGHT) {
+      viewport.allowZoomOut = false;
+    } else {
+      viewport.allowZoomOut = true;
+    }
+
     this.dispatchEvent('update');
   }
 
@@ -859,12 +868,16 @@ class Viewport extends BaseEventTarget {
     origin.v += canvasY/this.scale;
   }
 
+  allowZoomOut = true;
   _setUpMouseWheel(canvas) {
     canvas.onwheel = (e) => {
       e.preventDefault();
 
       // Clamp the delta, and ensure that we don't zoom out too far.
-      const ds = Math.pow(2, clamp(e.deltaY * 0.01, -0.5, 0.5));
+      let ds = Math.pow(2, clamp(e.deltaY * 0.01, -0.5, 0.5));
+      if (!this.allowZoomOut && ds < 1) {
+        ds = 1;
+      }
 
       const canvasOrigin = this._canvasOrigin();
       const canvasX = e.clientX - canvasOrigin.x;
