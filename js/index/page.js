@@ -185,11 +185,37 @@ const setUpDebug = (tree) => {
   });
 };
 
+const parsePathString = (str) => {
+  str = str.trim().toLowerCase();
+  if (str == 'i') return new RLEPath();
+
+  if (!str.match(/^([lr]\d*)+$/)) return undefined;
+
+  const path = [0];
+  for (const part of str.matchAll(/[lr]\d*/g)) {
+    const count = parseInt(part[0].substr(1)) || 1;
+    const bit = part[0][0] == 'r' ? 1 : 0;
+    if (path.length%2 == bit) {
+      path[path.length-1] += count;
+    } else {
+      path.push(count);
+    }
+  }
+
+  const rlepath = new RLEPath(path.map(i => BigInt(i)));
+
+  return rlepath;
+};
+
 const extractCfFromString = (str) => {
   const frac = MathHelpers.parseAsFraction(str);
   if (frac) return MathHelpers.findContinuedFractionBigInt(...frac);
 
-  const value = safeEval(str);
+  try {
+    const value = safeEval(str);
+  } catch (e) {
+    return undefined;
+  }
 
   if (typeof value == 'number') {
     // Determine the exact value of the floating point value.
@@ -205,7 +231,7 @@ const extractCfFromString = (str) => {
   }
 
   return undefined;
-}
+};
 
 const setUpControlPanel = (tree) => {
   // Set up tree type selector.
@@ -227,12 +253,25 @@ const setUpControlPanel = (tree) => {
   form.onsubmit = (e) => {
     e.preventDefault();
 
+    const rlepath = parsePathString(findExp.value);
+    if (rlepath !== undefined) {
+      tree.selectNodeById(NodeId.fromRLEPath(rlepath));
+      tree.moveToSelectedNode();
+      return false;
+    }
+
     const cf = extractCfFromString(findExp.value);
 
     if (cf !== undefined) {
       tree.selectNodeByContinuedFraction(cf);
       tree.moveToSelectedNode();
+      return false;
     }
+
+    findExp.classList.add('input-error');
+    window.setTimeout(
+      () => findExp.classList.remove('input-error'),
+      200);
 
     return false;
   };

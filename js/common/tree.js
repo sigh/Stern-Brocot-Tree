@@ -345,7 +345,7 @@ class TreeController extends BaseEventTarget {
 
   selectNodeByContinuedFraction(cf) {
     const nodeId = NodeId.fromContinuedFraction(this._treeType, cf);
-    this.selectedNodeId(nodeId);
+    this.selectNodeById(nodeId);
   }
 
   moveToSelectedNode() {
