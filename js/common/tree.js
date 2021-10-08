@@ -788,7 +788,6 @@ class Viewport extends BaseEventTarget {
   scale = 1;
 
   _canvas;
-  _dragDistance;
   _spatialIndex;
 
   constructor(canvas) {
@@ -800,11 +799,9 @@ class Viewport extends BaseEventTarget {
     this._actionDetector.addEventListener(
       'click', () => this.dispatchEvent('click'));
 
-    this._setUpMouseWheel(canvas);
+    this._setUpScale();
     this._setUpDrag();
     this._setUpMouseMove(canvas);
-
-    this._dragDistance = 0;
 
     this._spatialIndex = null;
   }
@@ -854,24 +851,31 @@ class Viewport extends BaseEventTarget {
   }
 
   allowZoomOut = true;
-  _setUpMouseWheel(canvas) {
-    canvas.onwheel = (e) => {
-      e.preventDefault();
-
-      // Clamp the delta, and ensure that we don't zoom out too far.
-      let ds = Math.pow(2, clamp(e.deltaY * 0.01, -0.5, 0.5));
+  _setUpScale() {
+    const handleScale = (ds, clientX, clientY) => {
       if (!this.allowZoomOut && ds < 1) {
         ds = 1;
       }
 
       const canvasOrigin = this._canvasOrigin();
-      const canvasX = e.clientX - canvasOrigin.x;
-      const canvasY = e.clientY - canvasOrigin.y;
+      const canvasX = clientX - canvasOrigin.x;
+      const canvasY = clientY - canvasOrigin.y;
 
       this.rescale(ds, canvasX, canvasY);
 
       this._update();
     };
+
+    this._actionDetector.addEventListener('wheel', e => {
+      // Clamp the delta, and ensure that we don't zoom out too far.
+      const ds = Math.pow(2, clamp(e.deltaY * 0.01, -0.5, 0.5));
+      handleScale(ds, e.clientX, e.clientY);
+    });
+
+    this._actionDetector.addEventListener('pinch', e => {
+      const ds = e.distance < 0 ? 0.9 : 1.1;
+      handleScale(ds, e.clientX, e.clientY);
+    });
   }
 
   resetSpatialIndex(bucketSize) {
@@ -942,7 +946,8 @@ class PointerActionDetector extends BaseEventTarget {
     super();
     this._container = container;
 
-    this._setUpDrag(container);
+    this._setUpPinchAndDrag(container);
+    this._setUpWheel(container);
   }
 
   static _pointerCoords(e) {
@@ -953,10 +958,30 @@ class PointerActionDetector extends BaseEventTarget {
     };
   }
 
-  _setUpDrag(container) {
-    const dragPos = {x: 0, y:0};
-    let dragDistance = 0;
+  static _numPointers(e) {
+    return e.touches ? e.touches.length : 1;
+  }
 
+  static _pinchDistance(e) {
+    const dx = e.touches[0].clientX - e.touches[1].clientX;
+    const dy = e.touches[0].clientY - e.touches[1].clientY;
+    return Math.sqrt(dx*dx+dy*dy);
+  }
+
+  _setUpWheel(container) {
+    const handleWheel = (e) => {
+      e.preventDefault();
+
+      this.dispatchEvent('wheel', {
+        deltaY: e.deltaY,
+        clientX: e.clientX,
+        clientY: e.clientY,
+      });
+    };
+    container.addEventListener('wheel', handleWheel);
+  }
+
+  _handleDrag(e, moveEvent, endEvent) {
     const dragMove = (e) => {
       const pointer = this.constructor._pointerCoords(e);
       const dx = pointer.x - dragPos.x;
@@ -968,23 +993,65 @@ class PointerActionDetector extends BaseEventTarget {
       this.dispatchEvent('drag', {dx: dx, dy: dy});
     };
 
+    const pointer = this.constructor._pointerCoords(e);
+    const dragPos = {
+      x: pointer.x,
+      y: pointer.y,
+    }
+    let dragDistance = 0;
+
+    document.addEventListener(moveEvent, dragMove);
+
+    const dragStop = () => {
+      document.removeEventListener(moveEvent, dragMove);
+      document.removeEventListener(endEvent, dragStop);
+      if (dragDistance <= 1) {
+        this.dispatchEvent('click');
+      }
+    };
+    document.addEventListener(endEvent, dragStop);
+  }
+
+  _handlePinch(e, moveEvent, endEvent) {
+    let distance = this.constructor._pinchDistance(e);
+
+    const pinchMove = (e) => {
+      const newDistance = this.constructor._pinchDistance(e);
+      const delta = newDistance-distance;
+      distance = newDistance;
+
+      const pointer0 = this.constructor._pointerCoords(e.touches[0]);
+      const pointer1 = this.constructor._pointerCoords(e.touches[1]);
+
+      this.dispatchEvent('pinch', {
+        distance: delta,
+        clientX: (pointer0.x + pointer1.x)/2,
+        clientY: (pointer0.y + pointer1.y)/2,
+      });
+    };
+
+
+    document.addEventListener(moveEvent, pinchMove);
+
+    const pinchStop = () => {
+      document.removeEventListener(moveEvent, pinchMove);
+      document.removeEventListener(endEvent, pinchStop);
+    };
+    document.addEventListener(endEvent, pinchStop);
+  };
+
+  _setUpPinchAndDrag(container) {
     const dragStart = (e, moveEvent, endEvent) => {
       e.preventDefault();
 
-      const pointer = this.constructor._pointerCoords(e);
-      dragPos.x = pointer.x;
-      dragPos.y = pointer.y;
-      dragDistance = 0;
-      document.addEventListener(moveEvent, dragMove);
-
-      const dragStop = () => {
-        document.removeEventListener(moveEvent, dragMove);
-        document.removeEventListener(endEvent, dragStop);
-        if (dragDistance <= 1) {
-          this.dispatchEvent('click');
-        }
-      };
-      document.addEventListener(endEvent, dragStop);
+      switch (this.constructor._numPointers(e)) {
+        case 1:
+          this._handleDrag(e, moveEvent, endEvent);
+          break;
+        case 2:
+          this._handlePinch(e, moveEvent, endEvent);
+          break;
+      }
     };
 
     container.addEventListener(
@@ -992,5 +1059,4 @@ class PointerActionDetector extends BaseEventTarget {
     container.addEventListener(
       'touchstart', e => dragStart(e, 'touchmove', 'touchend'));
   }
-
 }
