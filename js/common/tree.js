@@ -796,22 +796,17 @@ class Viewport extends BaseEventTarget {
 
     this._canvas = canvas;
 
+    this._actionDetector = new PointerActionDetector(canvas);
+    this._actionDetector.addEventListener(
+      'click', () => this.dispatchEvent('click'));
+
     this._setUpMouseWheel(canvas);
-    this._setUpMouseDrag(canvas);
+    this._setUpDrag();
     this._setUpMouseMove(canvas);
-    this._setUpMouseClick(canvas);
 
     this._dragDistance = 0;
 
     this._spatialIndex = null;
-  }
-
-  _setUpMouseClick(canvas) {
-    canvas.onclick = (e) => {
-      if (this._dragDistance <= 1) {
-        this.dispatchEvent('click');
-      }
-    };
   }
 
   _setUpMouseMove(canvas) {
@@ -821,36 +816,26 @@ class Viewport extends BaseEventTarget {
     };
   }
 
-  _setUpMouseDrag(canvas) {
-    let dragPos = {x: 0, y:0};
-    let origin = this.origin;
+  static _pointerCoords(e) {
+    const coords = e.touches ? e.touches[0] : e;
+    return {
+      x: coords.clientX,
+      y: coords.clientY,
+    };
+  }
 
-    const mouseMoveHandler = (e) => {
-      e.preventDefault();
-      const dx = e.clientX - dragPos.x;
-      const dy = e.clientY - dragPos.y;
-      this._dragDistance += Math.abs(dx) + Math.abs(dy);  // Manhatten distance.
+  _setUpDrag() {
+    const origin = this.origin;
+
+    this._actionDetector.addEventListener('drag', c => {
+      const dx = c.dx;
+      const dy = c.dy;
       const du = dx / this.scale;
       const dv = dy / this.scale;
       origin.u -= du;
       origin.v += dv;
-      dragPos.x = e.clientX;
-      dragPos.y = e.clientY;
       this._update();
-    };
-
-    canvas.onmousedown = (e) => {
-      e.preventDefault();
-      dragPos.x = e.clientX;
-      dragPos.y = e.clientY;
-      this._dragDistance = 0;
-      document.addEventListener('mousemove', mouseMoveHandler);
-      let mouseUpHandler = () => {
-        document.removeEventListener('mousemove', mouseMoveHandler);
-        document.removeEventListener('mouseup', mouseUpHandler);
-      };
-      document.addEventListener('mouseup', mouseUpHandler);
-    };
+    });
   }
 
   rescale(ds, canvasX, canvasY) {
@@ -950,4 +935,62 @@ class Viewport extends BaseEventTarget {
             obj: obj,
            };
   }
+}
+
+class PointerActionDetector extends BaseEventTarget {
+  constructor(container) {
+    super();
+    this._container = container;
+
+    this._setUpDrag(container);
+  }
+
+  static _pointerCoords(e) {
+    const coords = e.touches ? e.touches[0] : e;
+    return {
+      x: coords.clientX,
+      y: coords.clientY,
+    };
+  }
+
+  _setUpDrag(container) {
+    const dragPos = {x: 0, y:0};
+    let dragDistance = 0;
+
+    const dragMove = (e) => {
+      const pointer = this.constructor._pointerCoords(e);
+      const dx = pointer.x - dragPos.x;
+      const dy = pointer.y - dragPos.y;
+      dragDistance += Math.abs(dx) + Math.abs(dy);  // Manhatten distance.
+      dragPos.x = pointer.x;
+      dragPos.y = pointer.y;
+
+      this.dispatchEvent('drag', {dx: dx, dy: dy});
+    };
+
+    const dragStart = (e, moveEvent, endEvent) => {
+      e.preventDefault();
+
+      const pointer = this.constructor._pointerCoords(e);
+      dragPos.x = pointer.x;
+      dragPos.y = pointer.y;
+      dragDistance = 0;
+      document.addEventListener(moveEvent, dragMove);
+
+      const dragStop = () => {
+        document.removeEventListener(moveEvent, dragMove);
+        document.removeEventListener(endEvent, dragStop);
+        if (dragDistance <= 1) {
+          this.dispatchEvent('click');
+        }
+      };
+      document.addEventListener(endEvent, dragStop);
+    };
+
+    container.addEventListener(
+      'mousedown', e => dragStart(e, 'mousemove', 'mouseup'));
+    container.addEventListener(
+      'touchstart', e => dragStart(e, 'touchmove', 'touchend'));
+  }
+
 }
