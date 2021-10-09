@@ -99,7 +99,7 @@ class MathHelpers {
       if (found) {
         return [BigInt(found[1]), BigInt(found[2])];
       }
-      found = str.match(/^(\d*).(\d+)$/);
+      found = str.match(/^(\d*)[.](\d+)$/);
       if (found) {
         const intPart = BigInt(found[1]);
         const fracPart = BigInt(found[2]);

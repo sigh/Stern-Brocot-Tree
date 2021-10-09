@@ -211,8 +211,9 @@ const extractCfFromString = (str) => {
   const frac = MathHelpers.parseAsFraction(str);
   if (frac) return MathHelpers.findContinuedFractionBigInt(...frac);
 
+  let value;
   try {
-    const value = safeEval(str);
+    value = safeEval(str);
   } catch (e) {
     return undefined;
   }
