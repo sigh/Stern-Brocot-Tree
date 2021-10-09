@@ -386,6 +386,10 @@ class Renderer {
     ctx.stroke();
   }
 
+  static _textWidth(fontSize, text) {
+    return text.length*fontSize/2;
+  }
+
   _drawFraction(r, canvasX, canvasY, nodeHeight, color) {
     if (nodeHeight < 2) return [0, 0, 0, 0];
 
@@ -406,7 +410,7 @@ class Renderer {
     const fontSize = nodeHeight * textScale;
 
     ctx.font = fontSize + 'px Serif';
-    const width = ctx.measureText(n.length > d.length ? n : d).width;
+    const width = this.constructor._textWidth(fontSize, n.length > d.length ? n : d);
 
     let rect = [canvasX-width/2, canvasY-fontSize*1.1, width, fontSize*2.2];
     ctx.clearRect(...rect);
@@ -996,7 +1000,6 @@ class PointerActionDetector extends BaseEventTarget {
       dragDistance += Math.abs(dx) + Math.abs(dy);  // Manhatten distance.
       dragPos.x = pointer.x;
       dragPos.y = pointer.y;
-      console.log(dx, dy);
 
       this.dispatchEvent('drag', {deltaX: dx, deltaY: dy});
     };
