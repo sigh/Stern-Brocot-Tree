@@ -824,9 +824,9 @@ class Viewport extends BaseEventTarget {
   _setUpDrag() {
     const origin = this.origin;
 
-    this._actionDetector.addEventListener('drag', c => {
-      const dx = c.dx;
-      const dy = c.dy;
+    this._actionDetector.addEventListener('drag', e => {
+      const dx = e.deltaX;
+      const dy = e.deltaY;
       const du = dx / this.scale;
       const dv = dy / this.scale;
       origin.u -= du;
@@ -981,18 +981,7 @@ class PointerActionDetector extends BaseEventTarget {
     container.addEventListener('wheel', handleWheel);
   }
 
-  _handleDrag(e, moveEvent, endEvent) {
-    const dragMove = (e) => {
-      const pointer = this.constructor._pointerCoords(e);
-      const dx = pointer.x - dragPos.x;
-      const dy = pointer.y - dragPos.y;
-      dragDistance += Math.abs(dx) + Math.abs(dy);  // Manhatten distance.
-      dragPos.x = pointer.x;
-      dragPos.y = pointer.y;
-
-      this.dispatchEvent('drag', {dx: dx, dy: dy});
-    };
-
+  _handleDragStart(e, moveEvent, endEvent) {
     const pointer = this.constructor._pointerCoords(e);
     const dragPos = {
       x: pointer.x,
@@ -1000,19 +989,31 @@ class PointerActionDetector extends BaseEventTarget {
     }
     let dragDistance = 0;
 
+    const dragMove = (e) => {
+      const pointer = this.constructor._pointerCoords(e);
+      const dx = pointer.x - dragPos.x;
+      const dy = pointer.y - dragPos.y;
+      dragDistance += Math.abs(dx) + Math.abs(dy);  // Manhatten distance.
+      dragPos.x = pointer.x;
+      dragPos.y = pointer.y;
+      console.log(dx, dy);
+
+      this.dispatchEvent('drag', {deltaX: dx, deltaY: dy});
+    };
+
     document.addEventListener(moveEvent, dragMove);
 
-    const dragStop = () => {
+    const dragStop = (e) => {
       document.removeEventListener(moveEvent, dragMove);
       document.removeEventListener(endEvent, dragStop);
       if (dragDistance <= 1) {
-        this.dispatchEvent('click');
+        this.dispatchEvent('click', e);
       }
     };
     document.addEventListener(endEvent, dragStop);
   }
 
-  _handlePinch(e, moveEvent, endEvent) {
+  _handlePinchStart(e, moveEvent, endEvent) {
     let distance = this.constructor._pinchDistance(e);
 
     const pinchMove = (e) => {
@@ -1046,10 +1047,10 @@ class PointerActionDetector extends BaseEventTarget {
 
       switch (this.constructor._numPointers(e)) {
         case 1:
-          this._handleDrag(e, moveEvent, endEvent);
+          this._handleDragStart(e, moveEvent, endEvent);
           break;
         case 2:
-          this._handlePinch(e, moveEvent, endEvent);
+          this._handlePinchStart(e, moveEvent, endEvent);
           break;
       }
     };

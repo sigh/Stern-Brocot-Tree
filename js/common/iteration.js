@@ -126,23 +126,29 @@ class IterationController {
     this._items = [];
     this._offset = 0;
 
-    this._setUpMouseWheel(container);
+    this._setUpScroll(outerContainer);
 
     this._update = deferUntilAnimationFrame(this._update.bind(this));
     this._update();
   }
 
-  _setUpMouseWheel(container) {
-    this._outerContainer.onwheel = (e) => {
-      e.preventDefault();
+  _setUpScroll(container) {
+    const actionDetector = new PointerActionDetector(container);
 
-      const dy = e.deltaY;
+    const handleScroll = (dy) => {
       // TODO: Check if this scroll direction works regardless of user settings.
       this._offset -= dy;
       if (this._offset > this._itemHeight) this._offset = this._itemHeight;
 
       this._update();
     };
+
+    actionDetector.addEventListener('drag', e => {
+      handleScroll(-e.deltaY);
+    });
+    actionDetector.addEventListener('wheel', e => {
+      handleScroll(e.deltaY);
+    });
   }
 
   _makeItem(index) {
