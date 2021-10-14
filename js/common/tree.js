@@ -278,7 +278,7 @@ class TreeController extends BaseEventTarget {
     this._treeViewport = new TreeViewport(viewport);
     this._treeViewport.addEventListener('update', () => this._update());
 
-    this._renderer = new Renderer(canvas, this._treeViewport);
+    this._renderer = new TreeRenderer(canvas, this._treeViewport);
 
     this._update();
   }
@@ -355,25 +355,16 @@ class TreeController extends BaseEventTarget {
   }
 }
 
-class Renderer {
-  constructor(canvas, treeViewport) {
+class CanvasRenderer {
+  constructor(canvas) {
     this._canvas = canvas;
-
     this._ctx = canvas.getContext('2d');
-
-    this._treeViewport = treeViewport;
   }
 
   resetCanvas() {
     this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
     this._ctx.textAlign = 'center';
     this._ctx.textBaseline = 'middle';
-
-    this._treeViewport.resetSpatialIndex();
-    this.counters = {
-      nodesDrawn: 0,
-      initialNodes: 0,
-    }
   };
 
   _drawBar(ctx, x, y, length, width) {
@@ -391,9 +382,11 @@ class Renderer {
   }
 
   _drawFraction(r, canvasX, canvasY, nodeHeight, color) {
-    if (nodeHeight < 2) return [0, 0, 0, 0];
+    if (nodeHeight < 2) {
+      return [0, 0, 0, 0];
+    }
 
-    let ctx = this._ctx;
+    const ctx = this._ctx;
 
     if (color) {
       ctx.save();
@@ -412,7 +405,7 @@ class Renderer {
     ctx.font = fontSize + 'px Serif';
     const width = this.constructor._textWidth(fontSize, n.length > d.length ? n : d);
 
-    let rect = [canvasX-width/2, canvasY-fontSize*1.1, width, fontSize*2.2];
+    const rect = [canvasX-width/2, canvasY-fontSize*1.1, width, fontSize*2.2];
     ctx.clearRect(...rect);
 
     ctx.fillText(n, canvasX, canvasY - fontSize/2);
@@ -429,6 +422,23 @@ class Renderer {
     }
 
     return rect;
+  }
+}
+
+class TreeRenderer extends CanvasRenderer {
+  constructor(canvas, treeViewport) {
+    super(canvas);
+    this._treeViewport = treeViewport;
+    this.counters = {};
+  }
+
+  resetCanvas() {
+    super.resetCanvas();
+    this._treeViewport.resetSpatialIndex();
+    this.counters = {
+      nodesDrawn: 0,
+      initialNodes: 0,
+    }
   }
 
   _drawBranch(ctx, canvasX, canvasY, nodeHeight, dir, color) {
@@ -488,17 +498,17 @@ class Renderer {
     const canvasX = canvasXStart + nodeWidth/2;
 
     // Draw the selected branch.
-    if (selectionType > Renderer.SELECT_FINAL) {
+    if (selectionType > TreeRenderer.SELECT_FINAL) {
       this._drawBranch(this._ctx, canvasX, canvasY, nodeHeight,
-                       selectionType == Renderer.SELECT_LEFT ? -1 : 1,
-                       Renderer._PATH_COLOR);
+                       selectionType == TreeRenderer.SELECT_LEFT ? -1 : 1,
+                       TreeRenderer._PATH_COLOR);
     }
 
     // Draw the fraction.
     let color = null;
     if (selectionType) {
-      color = selectionType === Renderer.SELECT_FINAL
-        ? Renderer._SELECTED_COLOR : Renderer._PATH_COLOR;
+      color = selectionType === TreeRenderer.SELECT_FINAL
+        ? TreeRenderer._SELECTED_COLOR : TreeRenderer._PATH_COLOR;
     }
     const rect = this._drawFraction(frac, canvasX, canvasY, nodeHeight, color);
 
@@ -516,7 +526,7 @@ class Renderer {
 
     // Draw the branch.
     ctx.save();
-    ctx.strokeStyle = Renderer._SEED_COLOR;
+    ctx.strokeStyle = TreeRenderer._SEED_COLOR;
     ctx.setLineDash([nodeHeight/50]);
 
     ctx.lineWidth = nodeHeight/100;
@@ -528,7 +538,7 @@ class Renderer {
     ctx.restore();
 
     // Draw the seed.
-    this._drawFraction(v, canvasX, canvasYSeed, nodeHeight, Renderer._SEED_COLOR);
+    this._drawFraction(v, canvasX, canvasYSeed, nodeHeight, TreeRenderer._SEED_COLOR);
   }
 
   drawTree(selectedNodeId, valueFn) {
@@ -588,13 +598,13 @@ class Renderer {
       let [node, canvasXStart, canvasY, nodeWidth, revSelectedPath] = stack.pop();
       this.counters.nodesDrawn++;
 
-      let selectionType = Renderer.SELECT_NONE;
+      let selectionType = TreeRenderer.SELECT_NONE;
       if (revSelectedPath) {
         if (revSelectedPath.size() == 0) {
-          selectionType = Renderer.SELECT_FINAL;
+          selectionType = TreeRenderer.SELECT_FINAL;
           revSelectedPath = null;
         } else {
-          selectionType = revSelectedPath.lastBit() ? Renderer.SELECT_RIGHT : Renderer.SELECT_LEFT;
+          selectionType = revSelectedPath.lastBit() ? TreeRenderer.SELECT_RIGHT : TreeRenderer.SELECT_LEFT;
           revSelectedPath.rightShift(1n);
         }
       }
@@ -604,17 +614,17 @@ class Renderer {
 
 
       const canvasYLimit = canvasY + nodeWidth*0.25;
-      if (nodeWidth >= Renderer.MIN_NODE_WIDTH && canvasYLimit <= maxCanvasY) {
+      if (nodeWidth >= TreeRenderer.MIN_NODE_WIDTH && canvasYLimit <= maxCanvasY) {
         nodeWidth *= 0.5;
         const canvasXMid = canvasXStart+nodeWidth;
         canvasY += nodeWidth*0.75;
         if (canvasXMid >= 0) {
           stack.push([node.clone().goToLeftChild(),  canvasXStart, canvasY, nodeWidth,
-            selectionType === Renderer.SELECT_LEFT && revSelectedPath]);
+            selectionType === TreeRenderer.SELECT_LEFT && revSelectedPath]);
         }
         if (canvasXMid < maxCanvasX) {
           stack.push([node.clone().goToRightChild(), canvasXMid,   canvasY, nodeWidth,
-            selectionType === Renderer.SELECT_RIGHT && revSelectedPath]);
+            selectionType === TreeRenderer.SELECT_RIGHT && revSelectedPath]);
         }
       }
     }
