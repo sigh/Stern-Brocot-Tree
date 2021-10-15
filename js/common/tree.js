@@ -405,7 +405,7 @@ class CanvasRenderer {
     ctx.font = fontSize + 'px Serif';
     const width = this.constructor._textWidth(fontSize, n.length > d.length ? n : d);
 
-    const rect = [canvasX-width/2, canvasY-fontSize*1.1, width, fontSize*2.2];
+    const rect = [canvasX-width, canvasY-fontSize, width*2, fontSize*2];
     ctx.clearRect(...rect);
 
     ctx.fillText(n, canvasX, canvasY - fontSize/2);
