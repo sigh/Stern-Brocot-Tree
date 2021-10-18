@@ -45,8 +45,8 @@ class GridRenderer extends CanvasRenderer {
 
     for (let n = Math.max(1, Math.floor(minU/size)); n-1 < maxU/size; n++) {
       for (let d = Math.max(1, Math.floor(minV/size)); d-1 < maxV/size; d++) {
-        const midX = this._viewport.toCanvasX(n*size);
-        const midY = this._viewport.toCanvasY(d*size);
+        const midX = this._viewport.toCanvasX(n*size - size/2);
+        const midY = this._viewport.toCanvasY(d*size - size/2);
 
         this._drawBranches(n, d, midX, midY);
       }
@@ -57,8 +57,8 @@ class GridRenderer extends CanvasRenderer {
         const isLowestForm = MathHelpers.gcd(n, d) == 1;
         const color = isLowestForm ? 'black' : 'lightgrey';
 
-        const midX = this._viewport.toCanvasX(n*size);
-        const midY = this._viewport.toCanvasY(d*size);
+        const midX = this._viewport.toCanvasX(n*size - size/2);
+        const midY = this._viewport.toCanvasY(d*size - size/2);
 
         this._drawFraction(
           [n, d],
@@ -75,25 +75,17 @@ class GridController {
 
   constructor(canvas) {
     this._viewport = new Viewport(canvas);
-    this._viewport.addEventListener('update', () => this._update());
+    this._viewport.addEventListener('update', () => this.update());
 
     this._renderer = new GridRenderer(canvas, this._viewport);
   }
 
 
-  _update() {
+  update() {
     const viewport = this._viewport;
     viewport.allowZoomOut = viewport.scale > 0.33;
     this._renderer.resetCanvas();
     this._renderer.drawGrid();
   }
-}
-
-
-let tree;
-const initPage = () => {
-  const canvas = document.getElementById('grid-vis');
-  tree = new GridController(canvas);
-  tree._update();
 }
 

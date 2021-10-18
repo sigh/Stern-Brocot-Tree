@@ -14,7 +14,11 @@ numbers ($$ \mathbb{Q}^+ $$), with the rows having every numerator
 and the columns having every denominator.
 Then we can iterate over the grid such that we eventually reach each number.
 
-TODO: Insert demo
+<div>
+  <canvas id='grid-vis' width="300" height="300">
+    Your browser does not support canvas.
+  </canvas>
+</div>
 
 <details>
 

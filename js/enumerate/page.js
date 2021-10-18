@@ -74,6 +74,11 @@ const makeFinalIterationItem = (nodeId, index) => {
 };
 
 const initPage = () => {
+  // Grid.
+  const gridCanvas = document.getElementById('grid-vis');
+  const grid = new GridController(gridCanvas);
+  grid.update();
+
   // Initial demo.
   const sternBrocotDemo = document.getElementById('stern-brocot-demo');
   new TreeController(sternBrocotDemo);

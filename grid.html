@@ -14,7 +14,12 @@
   <script defer src="js/common/tree.js"></script>
   <script defer src="js/common/grid.js"></script>
   <script>
-    window.addEventListener('load', () => { initPage(); });
+    let grid;
+    window.addEventListener('load', () => {
+      const canvas = document.getElementById('grid-vis');
+      grid = new GridController(canvas);
+      grid.update();
+    });
   </script>
 </head>
 
