@@ -638,7 +638,8 @@ class TreeViewport extends BaseEventTarget {
 
   LAYER_WIDTH = 100;
   LAYER_HEIGHT = this.LAYER_WIDTH/2;
-  DEFAULT_TREE_HEIGHT = 0.95;  // As a percentage of the canvas height.
+  DEFAULT_TREE_HEIGHT = 0.8;  // As a percentage of the canvas height.
+  MIN_TREE_HEIGHT = 0.4;  // As a percentage of the canvas height.
 
   constructor(viewport) {
     super();
@@ -656,7 +657,7 @@ class TreeViewport extends BaseEventTarget {
     // Don't allow zooming out too far.
     const viewport = this._viewport;
     if (this._referenceNode.depth() == 0
-        && this.nodeWidth() < viewport.maxCanvasY() * this.DEFAULT_TREE_HEIGHT) {
+        && this.nodeWidth() < viewport.maxCanvasY() * this.MIN_TREE_HEIGHT) {
       viewport.allowZoomOut = false;
     } else {
       viewport.allowZoomOut = true;

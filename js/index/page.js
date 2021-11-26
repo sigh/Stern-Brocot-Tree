@@ -178,8 +178,19 @@ const setUpDebug = (tree) => {
   const debugDiv = document.getElementById('debug-info');
   const renderer = tree._renderer;
   const treeViewport = tree._treeViewport;
+  let numUpdates = 0;
+  let summaryVisible = true;
 
-  tree.addEventListener( 'update', () => {
+  tree.addEventListener('update', () => {
+    // Remove summary after a number of updates.
+    if (summaryVisible) {
+      numUpdates++;
+      if (numUpdates > 20) {
+        document.getElementById('summary').style.display = 'none';
+        summaryVisible = false;
+      }
+    }
+
     if (SHOW_DEBUG) {
       const counters = JSON.stringify(renderer.counters).replaceAll('"', '');
       debugDiv.textContent = counters + ' ' + treeViewport.referenceNode().depth();
