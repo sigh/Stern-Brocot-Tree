@@ -209,7 +209,7 @@ const parsePathString = (str) => {
 
 const extractCfFromString = (str) => {
   const frac = MathHelpers.parseAsFraction(str);
-  if (frac) return MathHelpers.findContinuedFractionBigInt(...frac);
+  if (frac && frac[0]) return MathHelpers.findContinuedFractionBigInt(...frac);
 
   let value;
   try {
@@ -218,7 +218,7 @@ const extractCfFromString = (str) => {
     return undefined;
   }
 
-  if (typeof value == 'number') {
+  if (typeof value == 'number' && value > 0 && isFinite(value)) {
     // Determine the exact value of the floating point value.
     const numberParts = MathHelpers.getNumberParts(value);
     const exp = BigInt(numberParts.intExponent);
