@@ -180,8 +180,10 @@ const setUpDebug = (tree) => {
   const treeViewport = tree._treeViewport;
 
   tree.addEventListener( 'update', () => {
-    const counters = JSON.stringify(renderer.counters).replaceAll('"', '');
-    debugDiv.textContent = counters + ' ' + treeViewport.referenceNode().depth();
+    if (SHOW_DEBUG) {
+      const counters = JSON.stringify(renderer.counters).replaceAll('"', '');
+      debugDiv.textContent = counters + ' ' + treeViewport.referenceNode().depth();
+    }
   });
 };
 
@@ -279,6 +281,7 @@ const setUpControlPanel = (tree) => {
 };
 
 let tree;
+let SHOW_DEBUG = false;
 const initPage = () => {
   let canvas = document.getElementById('tree-vis');
 
