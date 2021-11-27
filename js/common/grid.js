@@ -43,7 +43,7 @@ class GridRenderer extends CanvasRenderer {
     const size = this._NODE_SIZE;
     const nodeHeight = size*viewport.scale;
 
-    for (let n = Math.max(1, Math.floor(minU/size)); n-1 < maxU/size; n++) {
+    for (let n = Math.max(1, Math.floor(minU/size)); n-2 < maxU/size; n++) {
       for (let d = Math.max(1, Math.floor(minV/size)); d-1 < maxV/size; d++) {
         const midX = this._viewport.toCanvasX(n*size - size/2);
         const midY = this._viewport.toCanvasY(d*size - size/2);
