@@ -503,8 +503,9 @@ To do this we need to:
 
   Thus we can detect when we are at $$ R^{k-1} $$ and move to $$ L^{k} $$.
 
-  Note: It is sufficient to check that the top-right left entry is $$ 1 $$,
-        since the parent of every integer is an integer.
+  Note: We know we are at the right-mode node when
+  $$ \frac{n'}{m'} = \frac{1}{0} $$. Since this is the only time the denominator
+  is $$ 0 $$ we can just check that $$ n' = 0 $$.
 </details>
 
 <details>
@@ -628,15 +629,13 @@ a clever manipulation of matrices we can still use it to get:
 
 Putting it all together we have:
 
-TODO: n = 1 is wrong. It should be n'+n
-
 $$
 
 s(S) = s\left(\begin{pmatrix} n & n' \\ m & m' \end{pmatrix}\right)
 =
 \begin{cases}
-  \begin{pmatrix} 1 & m+2 \\ 0 & 1 \end{pmatrix}    & n = 1   \\
-  S\begin{pmatrix} 0 & -1 \\ 1 & 2j+1 \end{pmatrix} & n \ne 1 \\
+  \begin{pmatrix} 1 & m+1 \\ 0 & 1 \end{pmatrix}    & n' = 0   \\
+  S\begin{pmatrix} 0 & -1 \\ 1 & 2j+1 \end{pmatrix} & n' \ne 0 \\
 \end{cases}
 $$
 
@@ -771,8 +770,8 @@ $$ s(q=\frac{a}{b}) $$.
   f'(s(S))
   =
   \begin{cases}
-    f'\left(\begin{pmatrix} 1 & m+2 \\ 0 & 1 \end{pmatrix}\right) & n = 1   \\
-    f'\left(S\begin{pmatrix} 0 & -1 \\ 1 & 2j+1 \end{pmatrix}\right) & n \ne 1 \\
+    f'\left(\begin{pmatrix} 1 & m+2 \\ 0 & 1 \end{pmatrix}\right) & n' = 0   \\
+    f'\left(S\begin{pmatrix} 0 & -1 \\ 1 & 2j+1 \end{pmatrix}\right) & n' \ne 0 \\
   \end{cases}
   $$
 
@@ -794,6 +793,8 @@ $$ s(q=\frac{a}{b}) $$.
       &=& \frac{1}{2j+1-q}
   \end{eqnarray}
   $$
+
+  Finally, $$ n' = 0 \implies m' = 1 $$, therefore $$ b = n'+m' = 1 $$.
 
 </details>
 
