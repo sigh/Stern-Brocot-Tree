@@ -463,12 +463,12 @@ class TreeRenderer extends CanvasRenderer {
   // since this the main loop is size independant so should always be bounded
   // in time, assuming that layerWidth has already been constrained.
   drawTreeBranches(canvasXStart, canvasY, nodeWidth) {
-    let nodeHeight = nodeWidth*0.5;
-    let canvasX = canvasXStart + nodeWidth*0.5;
+    const ctx = this._ctx;
+    const maxCanvasY = this._canvas.height;
 
-    let ctx = this._ctx;
     let n = 1;
-    while (nodeHeight > 0.5 && canvasY) {
+    let nodeHeight = nodeWidth*0.5;
+    while (nodeHeight > 0.5 && canvasY < maxCanvasY) {
       let canvasX = canvasXStart + nodeHeight;
       for (let j = 0; j < n; j++) {
         this._drawBranch(ctx, canvasX, canvasY, nodeHeight, -1);
