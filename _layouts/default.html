@@ -4,6 +4,7 @@
     <meta charset='utf-8'>
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" href="{{ '/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
     <link rel="stylesheet" href="{{ '/css/enumerate.css?v=' | append: site.github.build_revision | relative_url }}">
     <link rel="stylesheet" href="{{ '/css/iteration.css?v=' | append: site.github.build_revision | relative_url }}">
 
@@ -21,17 +22,26 @@
     </script>
   </head>
 
-
   <body>
-    <header>
-      <div class="container">
-        <h1>{{ page.title }}</h1>
-      </div>
-    </header>
+    <div class="wrapper">
+      <section>
+        <div id="title">
+          <h1>{{ page.title | default: site.title | default: site.github.repository_name }}</h1>
+          <p>{{ page.description }}</p>
+        </div>
+        <hr>
+        <div id="main_content">
+          {{ content }}
+        </div>
+        <hr>
+        <footer>
+          {% if site.github.is_project_page %}
+            <a href="{{ site.github.repository_url }}"><span>View on GitHub</span></a>
+          {% else %}
+            <a href="{{ site.github.owner_url }}"><span>View on GitHub</span></a>
+          {% endif %}
+        </footer>
 
-    <div class="container">
-      <section id="main-content">
-        {{ content }}
       </section>
     </div>
 

@@ -85,15 +85,21 @@ $$
 
   \longrightarrow
 
-  \left( \color{grey}
-    \frac{0}{1},\color{black} \frac{1}{1} \color{grey}, \frac{1}{0}
-  \color{black} \right)
+  \left(
+    {\color{grey}\frac{0}{1},}
+    \frac{1}{1}
+    {\color{grey}, \frac{1}{0} }
+  \right)
 
   \longrightarrow
 
-  \left( \color{grey}
-    \frac{0}{1}, \color{black}\frac{1}{2}\color{grey}, \frac{1}{1}, \color{black}\frac{2}{1}\color{grey}, \frac{1}{0}
-  \color{black} \right)
+  \left(
+    {\color{grey} \frac{0}{1}, }
+    \frac{1}{2}
+    {\color{grey}, \frac{1}{1}, }
+    \frac{2}{1}
+    {\color{grey}, \frac{1}{0} }
+  \right)
 
   \longrightarrow \dots
 $$
@@ -248,10 +254,10 @@ Then prepending the strings with a $$ 1 $$ lets us interpret the strings as
 natural numbers in binary. Using the same examples:
 
 $$
-  \frac{1}{1} \to I \to \color{grey}1\color{black}_2 = 1 \quad
-  \frac{2}{1} \to R \to \color{grey}1\color{black}1_2 = 3 \quad
-  \frac{2}{5} \to L^2R \to \color{grey}1\color{black}001_2 = 9 \quad
-  \frac{22}{7} \to R^3L^6 \to \color{grey}1\color{black}111000000_2 = 960
+  \frac{1}{1} \to I \to {\color{grey}1}_2 = 1 \quad
+  \frac{2}{1} \to R \to {\color{grey}1}1_2 = 3 \quad
+  \frac{2}{5} \to L^2R \to {\color{grey}1}001_2 = 9 \quad
+  \frac{22}{7} \to R^3L^6 \to {\color{grey}1}111000000_2 = 960
 $$
 
 This is a bijection $$ \mathbb{Q}^+ \to \mathbb{N}^+ $$ which is equivalent to
@@ -484,8 +490,8 @@ To do this we need to:
   right to of the $$ 0 $$ to $$ 1 $$. For example:
 
   $$
-  \color{grey}100\color{black}0_2 + 1_2 =  \color{grey}100\color{black}1_2 \quad
-  \color{grey}10\color{black}011_2 + 1_2 = \color{grey}10\color{black}100_2 \quad
+  {\color{grey}100}0_2 + 1_2 =  {\color{grey}100}1_2 \quad
+  {\color{grey}10}011_2 + 1_2 = {\color{grey}10}100_2 \quad
               01111_2 + 1_2 =  10000_2 \quad
   $$
 
@@ -797,6 +803,8 @@ $$
     Your browser does not support canvas.
   </canvas>
 </div>
+
+---
 
 # Sources
 

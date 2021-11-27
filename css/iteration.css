@@ -6,6 +6,7 @@
 .iteration-container {
   box-shadow: 3px 3px 10px;
   margin: auto;
+  margin-bottom: 10px;
   display: block;
   overflow: hidden;
 }
@@ -41,7 +42,7 @@
   width: 100%;
   height: 100%;
 
-  background-image: linear-gradient(to right, transparent 70%, white 95%);
+  background-image: linear-gradient(to right, transparent 70%,  #252525 95%);
 }
 
 .iterator-symbol {
