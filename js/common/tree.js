@@ -265,10 +265,8 @@ class TreeController extends BaseEventTarget {
 
     this._canvas = canvas;
     let viewport = new Viewport(canvas);
-    viewport.addEventListener('click', () => {
-      this._stickyNodeId = this._hoverNodeId;
-      this.dispatchEvent('selectionChange');
-      this._update();
+    viewport.addEventListener('click', (coord) => {
+      this._updateSelection(coord, true);
     });
     viewport.addEventListener('mousemove', (coord) => {
       this._updateSelection(coord);
@@ -296,11 +294,15 @@ class TreeController extends BaseEventTarget {
     this.dispatchEvent('update');
   }
 
-  _updateSelection(coord) {
+  _updateSelection(coord, sticky) {
     const nodeId = coord.obj;
 
-    if (!nodeId && !this._hoverNodeId) return;
-    if (nodeId && nodeId.equals(this._hoverNodeId)) return;
+    if (sticky) {
+      this._stickyNodeId = nodeId;
+    } else {
+      if (!nodeId && !this._hoverNodeId) return;
+      if (nodeId && nodeId.equals(this._hoverNodeId)) return;
+    }
     this._hoverNodeId = nodeId;
 
 
@@ -812,7 +814,10 @@ class Viewport extends BaseEventTarget {
 
     this._actionDetector = new PointerActionDetector(canvas);
     this._actionDetector.addEventListener(
-      'click', () => this.dispatchEvent('click'));
+      'click', (pos) => {
+        const coord = this._clientXYToCoord(pos.x, pos.y);
+        this.dispatchEvent('click', coord);
+      });
 
     this._setUpScale();
     this._setUpDrag();
@@ -1021,7 +1026,7 @@ class PointerActionDetector extends BaseEventTarget {
       document.removeEventListener(moveEvent, dragMove);
       document.removeEventListener(endEvent, dragStop);
       if (dragDistance <= 1) {
-        this.dispatchEvent('click', e);
+        this.dispatchEvent('click', dragPos);
       }
     };
     document.addEventListener(endEvent, dragStop);
