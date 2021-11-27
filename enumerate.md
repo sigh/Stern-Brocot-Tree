@@ -39,7 +39,7 @@ Then we can iterate over the grid such that we eventually reach each number.
     \end{cases}
   $$
 
-  The first few elements of \(g\) are:
+  The first few elements of $$ g $$ are:
 
   $$
     0,
@@ -587,7 +587,7 @@ a clever manipulation of matrices we can still use it to get:
 
   $$
      A^\tau = JA^TJ \text{ where } A^\tau \text{ is } A
-     \text{ transposed along the off-diagonal }
+     \text{ transposed along the anti-diagonal }
   $$
 
   Also, by inspection, $$ L^\tau = L \text{ and } R^\tau = R $$.
@@ -710,12 +710,12 @@ This is an unfortunate loss, but let's see what we get in return.
 </details>
 
 Unlike the Stern-Brocot tree, we don't need to carry around a state matrix
-to compute the children, we can use the fraction directly! Let's see how this
-affects the iteration formula.
+to compute the children, we can use the fraction directly! This also let's us
+simplify the iteration formula.
 
 ## Iterating over the Rationals
 
-Now let's define the successor function over rationals as
+Define the successor function over rationals as
 $$ s(q=\frac{a}{b}) $$.
 
 <details>
@@ -826,13 +826,9 @@ $$ s(q=\frac{a}{b}) $$.
 Giving a final, simple formula for iterating through the positive rational numbers:
 
 $$
-  s(q) = \frac{1}{2 \lfloor q \rfloor + 1 - q}
-
-  \quad
-  \text{ or }
-  \quad
-
-  s\left(\frac{a}{b}\right) = \frac{b}{2 b \left\lfloor \frac{a}{b} \right\rfloor + b - a}
+  s\left(q = \frac{a}{b}\right)
+  = \frac{1}{2 \lfloor q \rfloor + 1 - q}
+  = \frac{b}{2 b \left\lfloor \frac{a}{b} \right\rfloor + b - a}
 $$
 
 <div id="final-mapping" class="iteration-tree-container">
