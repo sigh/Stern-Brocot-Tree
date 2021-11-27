@@ -59,6 +59,7 @@
 .frac > div {
     display: block;
     padding: 0.1em;
+    white-space: nowrap;
 }
 .frac > div:last-child {
     border-top: thin solid;

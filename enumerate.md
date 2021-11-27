@@ -265,7 +265,7 @@ traversing the Stern-Brocot tree layer by layer, i.e. a breath-first traversal.
 
 <div id="basic-mapping" class="iteration-tree-container">
   <div id="basic-mapping-iterator" class="iteration-container"></div>
-  <canvas id="basic-mapping-tree" width="500" height="400">
+  <canvas id="basic-mapping-tree" width="450" height="400">
     Your browser does not support canvas.
   </canvas>
 </div>
@@ -642,7 +642,7 @@ $$
 
 <div id="matrix-mapping-iteration" class="iteration-tree-container">
   <div id="matrix-mapping-iterator" class="iteration-container"></div>
-  <canvas id="matrix-mapping-tree" width="500" height="400">
+  <canvas id="matrix-mapping-tree" width="400" height="400">
     Your browser does not support canvas.
   </canvas>
 </div>
@@ -836,7 +836,7 @@ $$
 
 <div id="final-mapping" class="iteration-tree-container">
   <div id="final-mapping-iterator" class="iteration-container"></div>
-  <canvas id="final-mapping-tree" width="500" height="400">
+  <canvas id="final-mapping-tree" width="480" height="400">
     Your browser does not support canvas.
   </canvas>
 </div>
