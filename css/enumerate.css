@@ -30,3 +30,7 @@ summary p:first-of-type {
   display: inline-block;
   margin: 0;
 }
+
+details[open] summary {
+  margin-bottom: 10px;
+}

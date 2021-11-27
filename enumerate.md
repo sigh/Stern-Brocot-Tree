@@ -283,17 +283,54 @@ $$
 Define the function $$ f $$ to turn a matrix into a rational number:
 
 $$
-  f\left(\begin{pmatrix} n & n' \\ m & m'\end{pmatrix}\right) = \frac{m+m'}{n+n'}
+  f\left(\begin{pmatrix} n & n' \\ m & m'\end{pmatrix}\right)
+  = \frac{m+m'}{n+n'}
+  = \frac{a}{b}
 $$
 
-TODO: Explain why fractions are in a wierd order. So that I is the identify
-matrix. Also point out that the matrix representation is useful.
+<details>
+  <summary>
+  With these definitions, the path strings from above are _equations_ to generate a
+  value in the tree!
+  </summary>
 
-With these definitions, the path strings we created above are _equations_ to
-generate a value in the tree!
+  First we can verify that the empty path equals the root of the tree:
+  $$ f(I) = \frac{0 + 1}{1 + 0} = \frac{1}{1} $$
+
+  Then we verify that the left and right children of paths are correct.
+  Let the path string for $$ \frac{a}{b} $$ be $$ S $$, i.e.
+  $$ f(S) = \frac{a}{b} $$. By definition, $$ \frac{a}{b} $$ is the
+  mediant of $$ \frac{m}{n} $$ and $$ \frac{m'}{n'} $$.
+
+  To get the left child we append $$ L $$ to the path. This results in the
+  mediant of $$ \frac{m}{n} $$ and $$ \frac{a}{b} $$:
+
+  $$
+    f(SL)
+    = f\left(
+        \begin{pmatrix} n & n' \\ m & m' \end{pmatrix}
+        \begin{pmatrix} 1 & j \\ 0 & 1 \end{pmatrix}
+      \right)
+    = \frac{m+m+m'}{n+n+n'}
+    = \frac{m+a}{n+b}
+  $$
+
+  To get the left child we append $$ R $$ to the path. This results in the
+  mediant of $$ \frac{a}{b} $$ and $$ \frac{m'}{n'} $$:
+
+  $$
+    f(SR)
+    = f\left(
+        \begin{pmatrix} n & n' \\ m & m' \end{pmatrix}
+        \begin{pmatrix} 1 & 0 \\ 1 & 1 \end{pmatrix}
+      \right)
+    = \frac{m+m'+m'}{n+n'+n'}
+    = \frac{a+m'}{b+n'}
+  $$
+
+</details>
+
 Equivalently, we can think of the nodes of the tree being matrices themselves.
-
-TODO: Prove
 
 The concrete algorithm is:
 
