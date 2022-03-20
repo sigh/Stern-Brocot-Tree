@@ -9,10 +9,10 @@ The rational numbers ($$ \mathbb{Q} $$) are [countable](https://en.wikipedia.org
 meaning that we can match them up, one-to-one, with the natural
 numbers ($$ \mathbb{N} $$).
 
-A common way to show this is to create a grid of the positive rational
+A common demonstration of this is a grid of the positive rational
 numbers ($$ \mathbb{Q}^+ $$), with the rows having every numerator
 and the columns having every denominator.
-Then we can iterate over the grid such that we eventually reach each number.
+Then we can zig-zag through the grid such that we eventually reach each number.
 
 <div>
   <canvas id='grid-vis' width="300" height="300">
@@ -70,10 +70,10 @@ Let's do better.
 # The Stern-Brocot Tree
 
 The [Stern-Brocot Tree](https://en.wikipedia.org/wiki/Stern%E2%80%93Brocot_tree)
-is a structure which contains all the positive rationals uniquely, in their
-lowest form.
+is a structure which contains all the positive rationals uniquely, in order.
 
-Start with the sequence of fractions: $$ \left( \frac{0}{1}, \frac{1}{0} \right) $$.
+To construct it, start with the sequence of fractions:
+$$ \left( \frac{0}{1}, \frac{1}{0} \right) $$.
 
 Then expand the sequence by inserting the fraction
 $$ \frac{m+m'}{n+n'} $$ (called the mediant)
@@ -106,7 +106,7 @@ $$
 
 This sequence can be arranged into a binary tree with fractions
 $$ \frac{m+m'}{n+n'} $$ where $$ \frac{m}{n} $$ is it's nearest ancestor to
-the left, and $$ \frac{m'}{n'} $$ is it's nearest ancestor to the right.
+the left, and $$ \frac{m'}{n'} $$ is it's nearest ancestor to the right:
 
 <div>
   <canvas id='stern-brocot-demo' width="500" height="400">
@@ -223,7 +223,7 @@ This gives us several nice properties:
 Thus the Stern-Brocot Tree is a binary search tree over all the positive
 rationals!
 
-# Indexing with Matrices
+# Defining the Bijection
 
 Each rational in tree can be uniquely identified by the path taken to reach
 it in the tree. We will use:
@@ -237,31 +237,15 @@ For convenience we will also use:
 * Exponents to represent runs of the same value. i.e.
   $$ X^n = \underbrace{XX \dots X}_{n} $$
 
-For example
-$$
-  \frac{1}{1} \to I \quad
-  \frac{2}{1} \to R \quad
-  \frac{2}{5} \to LLR = L^2R \quad
-  \frac{22}{7} \to RRRLLLLLL = R^3L^6
-$$
-
 This gives a bijection from the positive rationals to the finite strings made up
 of $$ L $$ and $$ R $$: $$ \mathbb{Q}^+ \to \{L,R\}^* $$.
 
 If we use $$ \{0,1\} $$ instead of $$ \{L,R\} $$,
 then we have strings of binary digits.
 Then prepending the strings with a $$ 1 $$ lets us interpret the strings as
-natural numbers in binary. Using the same examples:
+natural numbers in binary.
 
-$$
-  \frac{1}{1} \to I \to {\color{grey}1}_2 = 1 \quad
-  \frac{2}{1} \to R \to {\color{grey}1}1_2 = 3 \quad
-  \frac{2}{5} \to L^2R \to {\color{grey}1}001_2 = 9 \quad
-  \frac{22}{7} \to R^3L^6 \to {\color{grey}1}111000000_2 = 960
-$$
-
-This is a bijection $$ \mathbb{Q}^+ \to \mathbb{N}^+ $$ which is equivalent to
-traversing the Stern-Brocot tree layer by layer, i.e. a breath-first traversal.
+Concrete examples of the mapping:
 
 <div id="basic-mapping" class="iteration-tree-container">
   <div id="basic-mapping-iterator" class="iteration-container"></div>
@@ -270,7 +254,13 @@ traversing the Stern-Brocot tree layer by layer, i.e. a breath-first traversal.
   </canvas>
 </div>
 
-To concisely describe this process, define the matrices:
+This is a bijection $$ \mathbb{Q}^+ \to \mathbb{N}^+ $$ which is equivalent to
+traversing the Stern-Brocot tree layer by layer, i.e. a breath-first traversal.
+
+# Indexing with Matrices
+
+To concisely describe the algorithm to compute the bijection,
+define the matrices:
 
 $$
   I = \begin{pmatrix} 1 & 0 \\ 0 & 1 \end{pmatrix}
@@ -365,16 +355,16 @@ The concrete algorithm is:
 </div>
 
 
-# Optimizing with Euclid
-
-We now have a nice bijection.
+We now have an easily computable bijection.
 
 We can even iterate over all the rationals by
 repeatedly evaluating `q = toRational(toNatural(q)+1)`, although that is a
 bit cumbersome as we have to continually translate between representations.
+Let's improve this.
 
-However, before we find a better way of iterating, let's optimize this algorithm
-a bit to uncover some deeper connections.
+# Optimizing with Euclid
+
+First, let's optimize this algorithm to uncover some deeper connections.
 
 <details>
   <summary>
@@ -607,7 +597,7 @@ a clever manipulation of matrices we can still use it to get:
   \end{eqnarray}
   $$
 
-  Because $$ S^\tau $$ is itself a valid path, it is valid rational in the
+  Because $$ S^\tau $$ is itself a valid path, it is a valid rational in the
   Stern-Brocot tree where:
 
   $$
@@ -838,7 +828,8 @@ $$
   </canvas>
 </div>
 
-To further explore the Stern-Brocot and Calkin-Wilf trees go to
+To further explore the Stern-Brocot and Calkin-Wilf trees with an interactive
+demo, see:
 [https://sigh.github.io/Stern-Brocot-Tree/](https://sigh.github.io/Stern-Brocot-Tree/).
 
 ---
