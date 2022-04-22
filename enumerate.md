@@ -9,10 +9,9 @@ The rational numbers ($$ \mathbb{Q} $$) are [countable](https://en.wikipedia.org
 meaning that we can match them up, one-to-one, with the natural
 numbers ($$ \mathbb{N} $$).
 
-A common demonstration of this is a grid of the positive rational
-numbers ($$ \mathbb{Q}^+ $$), with the rows having every numerator
-and the columns having every denominator.
-Then we can zig-zag through the grid such that we eventually reach each number.
+A common demonstration of this is to arrange the positive rational numbers
+($$ \mathbb{Q}^+ $$) in a grid, and zig-zag through the grid such that we
+eventually reach every number:
 
 <div>
   <canvas id='grid-vis' width="300" height="300">
@@ -27,19 +26,13 @@ Then we can zig-zag through the grid such that we eventually reach each number.
   construct a mapping $$ \mathbb{N} \to \mathbb{Q} $$.
   </summary>
 
-  For a bijective mapping $$ f(q): \mathbb{N}^+ \to \mathbb{Q}^+ $$, define
-  $$ g(q): \mathbb{N} \to \mathbb{Q} $$ as:
+  A straight-forward mapping is to map:
 
-  $$
-    g(n) =
-    \begin{cases}
-      0                 & \text{ for } n = 0 \\
-      f(\frac{n}{2})    & \text{ for } n = 0 \mod{2} \\
-      -f(\frac{n+1}{2}) & \text{ for } n= 1 \mod{2} \\
-    \end{cases}
-  $$
+  - The rational 0 to the natural number 0
+  - The positive rationals to the odd numbers
+  - The negative rationals to the even numbers
 
-  The first few elements of $$ g $$ are:
+  Concretely, for the grid above:
 
   $$
     0,
@@ -56,21 +49,21 @@ Then we can zig-zag through the grid such that we eventually reach each number.
 
 However, this mapping is not ideal:
 
-* The grid, by itself, has many duplicates because each rational
-$$ \frac{a}{b} $$ appears an infinite number of times as $$ \frac{ka}{kb} $$.
-These must be detected and skipped over.
-* Even detecting whether we should skip a fraction can be expensive. We must
+* The grid has many duplicates which must be detected and skipped over. (Each
+  rational $$ \frac{a}{b} $$ appears an infinite number of times in the grid as
+  $$ \frac{ka}{kb} $$).
+* Even detecting whether we should skip a fraction can be tedious. We must
   determine if $$ gcd(a,b) = 1 $$.
-* Without counting from the start, it's not easy to determine the index $$ n $$
-  for a given rational $$ q $$ or vice-versa. It is difficult to compute
-  how many fractions have been skipped over.
+* Without counting from the start, it's not easy to determine the index
+  for a given rational or vice-versa.
 
 Let's do better.
 
 # The Stern-Brocot Tree
 
 The [Stern-Brocot Tree](https://en.wikipedia.org/wiki/Stern%E2%80%93Brocot_tree)
-is a structure which contains all the positive rationals uniquely, in order.
+is a remarkable structure which contains all the positive rationals uniquely
+in their lowest form.
 
 To construct it, start with the sequence of fractions:
 $$ \left( \frac{0}{1}, \frac{1}{0} \right) $$.
@@ -78,7 +71,19 @@ $$ \left( \frac{0}{1}, \frac{1}{0} \right) $$.
 Then expand the sequence by inserting the fraction
 $$ \frac{m+m'}{n+n'} $$ (called the mediant)
 between any two adjacent fractions
-$$ ( \dots \frac{m}{n}, \frac{m'}{n'} \dots ) $$:
+$$\frac{m}{n}$$ and $$\frac{m'}{n'}$$:
+
+$$
+  \left( \dots \frac{m}{n}, \frac{m'}{n'} \dots \right)
+  \longrightarrow
+  \left( \dots
+    {\color{grey}\frac{m}{n},}
+    \frac{m+m'}{n+n'},
+    {\color{grey}\frac{m'}{n'}}
+  \dots \right)
+$$
+
+The initial expansions are:
 
 $$
   \left( \frac{0}{1}, \frac{1}{0} \right)
@@ -98,6 +103,20 @@ $$
     \frac{1}{2}
     {\color{grey}, \frac{1}{1}, }
     \frac{2}{1}
+    {\color{grey}, \frac{1}{0} }
+  \right)
+
+  \longrightarrow
+
+  \left(
+    {\color{grey} \frac{0}{1}, }
+    \frac{1}{3}
+    {\color{grey} \frac{1}{2}, }
+    \frac{2}{3}
+    {\color{grey}, \frac{1}{1}, }
+    \frac{3}{2}
+    {\color{grey}, \frac{2}{1}, }
+    \frac{3}{1}
     {\color{grey}, \frac{1}{0} }
   \right)
 
@@ -215,7 +234,7 @@ This gives us several nice properties:
 
   $$ \implies a+b \ge m'+n' + m+n $$
 
-  Since $$ m'+n' + m+n $$ increase at every step in the process, it must
+  Since $$ m'+n' + m+n $$ increases at every step in the process, it must
   eventually equal to $$ a + b $$.
 
 </details>
