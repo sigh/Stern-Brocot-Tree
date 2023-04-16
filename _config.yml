@@ -1,5 +1,3 @@
-google_analytics: UA-177463638-1
-
 kramdown:
   parse_block_html: true
 

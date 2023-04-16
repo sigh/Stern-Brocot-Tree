@@ -1,60 +1,61 @@
 <!DOCTYPE html>
-<html lang="{{ site.lang | default: "en-US" }}">
-  <head>
-    <meta charset='utf-8'>
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link rel="stylesheet" href="{{ '/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
-    <link rel="stylesheet" href="{{ '/css/enumerate.css?v=' | append: site.github.build_revision | relative_url }}">
-    <link rel="stylesheet" href="{{ '/css/iteration.css?v=' | append: site.github.build_revision | relative_url }}">
-    <title>{{ page.title }}</title>
+<html lang="{{ site.lang | default: " en-US" }}">
 
-{% include mathjax.html %}
+<head>
+  <meta charset='utf-8'>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="{{ '/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
+  <link rel="stylesheet" href="{{ '/css/enumerate.css?v=' | append: site.github.build_revision | relative_url }}">
+  <link rel="stylesheet" href="{{ '/css/iteration.css?v=' | append: site.github.build_revision | relative_url }}">
+  <title>{{ page.title }}</title>
 
-    <script src="{{ '/js/common/rle_path.js?v=' | append: site.github.build_revision | relative_url }}" defer></script>
-    <script src="{{ '/js/common/math_helpers.js?v=' | append: site.github.build_revision | relative_url }}" defer></script>
-    <script src="{{ '/js/common/util.js?v=' | append: site.github.build_revision | relative_url }}" defer></script>
-    <script src="{{ '/js/common/tree.js?v=' | append: site.github.build_revision | relative_url }}" defer></script>
-    <script src="{{ '/js/common/grid.js?v=' | append: site.github.build_revision | relative_url }}" defer></script>
-    <script src="{{ '/js/common/iteration.js?v=' | append: site.github.build_revision | relative_url }}" defer></script>
-    <script src="{{ '/js/enumerate/page.js?v=' | append: site.github.build_revision | relative_url }}" defer></script>
-    <script>
-      window.addEventListener('load', () => { initPage(); });
-    </script>
-  </head>
+  {% include mathjax.html %}
 
-  <body>
-    <div class="wrapper">
-      <section>
-        <div id="title">
-          <h1>{{ page.title | default: site.title | default: site.github.repository_name }}</h1>
-          <p>{{ page.description }}</p>
-        </div>
-        <hr>
-        <div id="main_content">
-          {{ content }}
-        </div>
-        <hr>
-        <footer>
-          {% if site.github.is_project_page %}
-            <a href="{{ site.github.repository_url }}"><span>View on GitHub</span></a>
-          {% else %}
-            <a href="{{ site.github.owner_url }}"><span>View on GitHub</span></a>
-          {% endif %}
-        </footer>
+  <script src="{{ '/js/common/rle_path.js?v=' | append: site.github.build_revision | relative_url }}" defer></script>
+  <script src="{{ '/js/common/math_helpers.js?v=' | append: site.github.build_revision | relative_url }}"
+    defer></script>
+  <script src="{{ '/js/common/util.js?v=' | append: site.github.build_revision | relative_url }}" defer></script>
+  <script src="{{ '/js/common/tree.js?v=' | append: site.github.build_revision | relative_url }}" defer></script>
+  <script src="{{ '/js/common/grid.js?v=' | append: site.github.build_revision | relative_url }}" defer></script>
+  <script src="{{ '/js/common/iteration.js?v=' | append: site.github.build_revision | relative_url }}" defer></script>
+  <script src="{{ '/js/enumerate/page.js?v=' | append: site.github.build_revision | relative_url }}" defer></script>
+  <script>
+    window.addEventListener('load', () => { initPage(); });
+  </script>
+</head>
 
-      </section>
-    </div>
+<body>
+  <div class="wrapper">
+    <section>
+      <div id="title">
+        <h1>{{ page.title | default: site.title | default: site.github.repository_name }}</h1>
+        <p>{{ page.description }}</p>
+      </div>
+      <hr>
+      <div id="main_content">
+        {{ content }}
+      </div>
+      <hr>
+      <footer>
+        {% if site.github.is_project_page %}
+        <a href="{{ site.github.repository_url }}"><span>View on GitHub</span></a>
+        {% endif %}
+        <br>
+        More articles and projects at <a href="https://sigh.github.io">sigh.github.io</a>
+      </footer>
 
-    {% if site.google_analytics %}
-      <script>
-        (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
-        (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
-        m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
-        })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
-        ga('create', '{{ site.google_analytics }}', 'auto');
-        ga('send', 'pageview');
-      </script>
-    {% endif %}
-  </body>
+    </section>
+  </div>
+
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-2SQH4BL89R"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag() { dataLayer.push(arguments); }
+    gtag('js', new Date());
+
+    gtag('config', 'G-2SQH4BL89R');
+  </script>
+</body>
+
 </html>
