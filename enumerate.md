@@ -28,9 +28,9 @@ eventually reach every number:
 
   A straight-forward mapping is to map:
 
-  - The rational 0 to the natural number 0
-  - The positive rationals to the odd numbers
-  - The negative rationals to the even numbers
+- The rational 0 to the natural number 0
+- The positive rationals to the odd numbers
+- The negative rationals to the even numbers
 
   Concretely, for the grid above:
 
@@ -49,12 +49,12 @@ eventually reach every number:
 
 However, this mapping is not ideal:
 
-* The grid has many duplicates which must be detected and skipped over. (Each
+- The grid has many duplicates which must be detected and skipped over. (Each
   rational $$ \frac{a}{b} $$ appears an infinite number of times in the grid as
   $$ \frac{ka}{kb} $$).
-* Even detecting whether we should skip a fraction can be tedious. We must
+- Even detecting whether we should skip a fraction can be tedious. We must
   determine if $$ gcd(a,b) = 1 $$.
-* Without counting from the start, it's not easy to determine the index
+- Without counting from the start, it's not easy to determine the index
   for a given rational or vice-versa.
 
 Let's do better.
@@ -247,13 +247,13 @@ rationals!
 Each rational in tree can be uniquely identified by the path taken to reach
 it in the tree. We will use:
 
-* $$ L $$ to represent taking a left branch
-* $$ R $$ to represent taking a right branch
+- $$ L $$ to represent taking a left branch
+- $$ R $$ to represent taking a right branch
 
 For convenience we will also use:
 
-* $$ I $$ to represent the empty path
-* Exponents to represent runs of the same value. i.e.
+- $$ I $$ to represent the empty path
+- Exponents to represent runs of the same value. i.e.
   $$ X^n = \underbrace{XX \dots X}_{n} $$
 
 This gives a bijection from the positive rationals to the finite strings made up
@@ -318,7 +318,7 @@ $$
     f(SL)
     = f\left(
         \begin{pmatrix} n & n' \\ m & m' \end{pmatrix}
-        \begin{pmatrix} 1 & j \\ 0 & 1 \end{pmatrix}
+        \begin{pmatrix} 1 & 1 \\ 0 & 1 \end{pmatrix}
       \right)
     = \frac{m+m+m'}{n+n+n'}
     = \frac{m+a}{n+b}
@@ -372,7 +372,6 @@ The concrete algorithm is:
   ```
 
 </div>
-
 
 We now have an easily computable bijection.
 
@@ -453,13 +452,13 @@ def toNatural(q=a/b):
 
    Notes:
 
-   * The main loop is the Euclidean `gcd` algorithm.
-   * `t` swaps between `0` and `1`. It starts at `1` because we start by assuming
+- The main loop is the Euclidean `gcd` algorithm.
+- `t` swaps between `0` and `1`. It starts at `1` because we start by assuming
      that `a  > b`.
-   * `n<<v` $$ = n 2^v $$ shifts `n` to make room for `v` bits.
-   * `(t<<v)-t` $$ = t(2^v-1) $$ creates a string of `t`s to add to the end
+- `n<<v` $$ = n 2^v $$ shifts `n` to make room for `v` bits.
+- `(t<<v)-t` $$ = t(2^v-1) $$ creates a string of `t`s to add to the end
      of  `n`.
-   * `n>>1` removes the last bit, as the algorithm goes one iteration too far.
+- `n>>1` removes the last bit, as the algorithm goes one iteration too far.
      We want to stop when `a == b`, not when they reach `0`.
 
 </details>
@@ -494,8 +493,8 @@ To do this we need to:
   For the $$ k^{th} $$ layer
   (where $$ \frac{1}{1} $$ is layer $$ 0 $$):
 
-  * The first path is $$ L^k $$ with index $$ 2^k $$
-  * The last path is $$ R^k $$ with index $$ 2^{k+1}-1 $$
+- The first path is $$ L^k $$ with index $$ 2^k $$
+- The last path is $$ R^k $$ with index $$ 2^{k+1}-1 $$
 
   We can now show by induction that:
 
@@ -515,6 +514,7 @@ To do this we need to:
   Note: We know we are at the right-mode node when
   $$ \frac{n'}{m'} = \frac{1}{0} $$. Since this is the only time the denominator
   is $$ 0 $$ we can just check that $$ n' = 0 $$.
+
 </details>
 
 <details>
@@ -635,13 +635,13 @@ a clever manipulation of matrices we can still use it to get:
   $$ j = \left\lfloor \frac{n+m-1}{n'+m'} \right\rfloor  $$
 </details>
 
-
 Putting it all together we have:
 
 $$
 
 s(S) = s\left(\begin{pmatrix} n & n' \\ m & m' \end{pmatrix}\right)
 =
+
 \begin{cases}
   \begin{pmatrix} 1 & m+1 \\ 0 & 1 \end{pmatrix}    & n' = 0   \\
   S\begin{pmatrix} 0 & -1 \\ 1 & 2j+1 \end{pmatrix} & n' \ne 0 \\
@@ -654,7 +654,6 @@ $$
     Your browser does not support canvas.
   </canvas>
 </div>
-
 
 We can now iterate over the rationals without having to run the Euclidean
 algorithm each time! However, we need to carry around extra state $$ S $$,
@@ -766,7 +765,7 @@ $$ s(q=\frac{a}{b}) $$.
 
   $$ s(q) = f'(s(S)) =
     \begin{cases}
-      \frac{1}{q} & b = 1   \\
+      \frac{1}{q+1} & b = 1   \\
       \frac{1}{2j+1-q} & b \ne 1 \\
     \end{cases}
   $$
