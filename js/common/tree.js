@@ -13,9 +13,9 @@ class TreeState {
   static getValueFn(treeType) {
     switch (treeType) {
       case 'stern-brocot':
-        return (s) => [s.m0+s.m1, s.n0+s.n1];
+        return (s) => [s.m0 + s.m1, s.n0 + s.n1];
       case 'calkin-wilf':
-        return (s) => [s.m0+s.n0, s.m1+s.n1];
+        return (s) => [s.m0 + s.n0, s.m1 + s.n1];
     }
   }
 
@@ -25,20 +25,20 @@ class TreeState {
 
   // Go left k times.
   goToLeftChild(k) {
-    this.m1 += this.m0*k;
-    this.n1 += this.n0*k;
+    this.m1 += this.m0 * k;
+    this.n1 += this.n0 * k;
     return this;
   }
   // Go right k times.
   goToRightChild(k) {
-    this.m0 += this.m1*k;
-    this.n0 += this.n1*k;
+    this.m0 += this.m1 * k;
+    this.n0 += this.n1 * k;
     return this;
   }
 
   // Go to the parent node.
   goToParent() {
-    if (this.m0+this.n0 < this.m1+this.n1) {
+    if (this.m0 + this.n0 < this.m1 + this.n1) {
       this.m1 -= this.m0;
       this.n1 -= this.n0;
     } else {
@@ -52,21 +52,21 @@ class TreeState {
   // From https://www.researchgate.net/publication/221440223_Recounting_the_Rationals_Twice
 
   goToNextSibling() {
-    const j = (this.n0+this.m0-1n) / (this.n1+this.m1);
-    const k = (j<<1n)+1n;
+    const j = (this.n0 + this.m0 - 1n) / (this.n1 + this.m1);
+    const k = (j << 1n) + 1n;
     [this.m0, this.n0, this.m1, this.n1] = [
       this.m1,
       this.n1,
-      this.m1*k-this.m0,
-      this.n1*k-this.n0];
+      this.m1 * k - this.m0,
+      this.n1 * k - this.n0];
     return this;
   };
   goToPrevSibling() {
-    const j = (this.n1+this.m1-1n) / (this.n0+this.m0);
-    const k = (j<<1n)+1n;
+    const j = (this.n1 + this.m1 - 1n) / (this.n0 + this.m0);
+    const k = (j << 1n) + 1n;
     [this.m0, this.n0, this.m1, this.n1] = [
-      this.m0*k-this.m1,
-      this.n0*k-this.n1,
+      this.m0 * k - this.m1,
+      this.n0 * k - this.n1,
       this.m0,
       this.n0];
     return this;
@@ -97,9 +97,9 @@ class NodeId {
   static fromContinuedFraction(treeType, cf) {
     // To get to the tree path, we need to decrement the last cf value by 1.
     const rle = cf.slice();
-    rle[rle.length-1]--;
+    rle[rle.length - 1]--;
 
-    const depth = rle.reduce((a,b) => a+b);
+    const depth = rle.reduce((a, b) => a + b);
 
     const rlepath = new RLEPath(rle);
 
@@ -120,12 +120,12 @@ class NodeId {
     }
 
     if (treeType == 'calkin-wilf') {
-      if (cf.length%2 == 0) cf.push(0);
+      if (cf.length % 2 == 0) cf.push(0);
       cf.reverse();
-      if (cf[cf.length-1] == 0) cf.pop();
+      if (cf[cf.length - 1] == 0) cf.pop();
     }
 
-    cf[cf.length-1]++;
+    cf[cf.length - 1]++;
     return cf;
   }
 
@@ -144,7 +144,7 @@ class NodeId {
     return NodeId.fromRLEPath(rlepath);
   }
   parent() {
-    if (this.depth() == 0) throw('Already at top of tree.');
+    if (this.depth() == 0) throw ('Already at top of tree.');
 
     const rlepath = this._rlepath.clone();
     rlepath.rightShift(1n);
@@ -167,7 +167,7 @@ class NodeId {
 
   equals(other) {
     return (other
-         && this._rlepath.equals(other._rlepath));
+      && this._rlepath.equals(other._rlepath));
   }
 
   relativeNodeTo(other) {
@@ -367,6 +367,8 @@ class CanvasRenderer {
     this._ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
     this._ctx.textAlign = 'center';
     this._ctx.textBaseline = 'middle';
+    this._ctx.strokeStyle = '#666666';
+    this._ctx.fillStyle = '#333333';
   };
 
   _drawBar(ctx, x, y, length, width) {
@@ -374,13 +376,13 @@ class CanvasRenderer {
     y -= ctx.lineWidth;
 
     ctx.beginPath();
-    ctx.moveTo(x - length*0.5, y);
-    ctx.lineTo(x + length*0.5, y);
+    ctx.moveTo(x - length * 0.5, y);
+    ctx.lineTo(x + length * 0.5, y);
     ctx.stroke();
   }
 
   static _textWidth(fontSize, text) {
-    return text.length*fontSize/2;
+    return text.length * fontSize / 2;
   }
 
   _drawFraction(r, canvasX, canvasY, nodeHeight, color) {
@@ -401,22 +403,22 @@ class CanvasRenderer {
 
     // Determine the font size so that the numbers fit within the node.
     const length = Math.max(n.length, d.length);
-    const textScale = 0.4 * Math.min(6/length, 1);
+    const textScale = 0.4 * Math.min(6 / length, 1);
     const fontSize = nodeHeight * textScale;
 
-    ctx.font = fontSize + 'px Serif';
+    ctx.font = fontSize + 'px sans-serif';
     const width = this.constructor._textWidth(fontSize, n.length > d.length ? n : d);
 
-    const rect = [canvasX-width, canvasY-fontSize, width*2, fontSize*2];
+    const rect = [canvasX - width, canvasY - fontSize, width * 2, fontSize * 2];
     ctx.clearRect(...rect);
 
-    ctx.fillText(n, canvasX, canvasY - fontSize/2);
-    ctx.fillText(d, canvasX, canvasY + fontSize/2);
+    ctx.fillText(n, canvasX, canvasY - fontSize / 2);
+    ctx.fillText(d, canvasX, canvasY + fontSize / 2);
 
     // Render the bar of the fraction, but only if the font is big enough for
     // it to be noticable.
     if (fontSize > 2) {
-      this._drawBar(ctx, canvasX, canvasY, width, fontSize/20);
+      this._drawBar(ctx, canvasX, canvasY, width, fontSize / 20);
     }
 
     if (color) {
@@ -449,10 +451,10 @@ class TreeRenderer extends CanvasRenderer {
       ctx.strokeStyle = color;
     }
 
-    ctx.lineWidth = nodeHeight/100;
+    ctx.lineWidth = nodeHeight / 100;
     ctx.beginPath();
     ctx.lineTo(canvasX, canvasY);
-    ctx.lineTo(canvasX + dir*nodeHeight*0.5, canvasY + nodeHeight*0.75);
+    ctx.lineTo(canvasX + dir * nodeHeight * 0.5, canvasY + nodeHeight * 0.75);
     ctx.stroke();
 
     if (color) {
@@ -469,7 +471,7 @@ class TreeRenderer extends CanvasRenderer {
     const maxCanvasY = this._canvas.height;
 
     let n = 1;
-    let nodeHeight = nodeWidth*0.5;
+    let nodeHeight = nodeWidth * 0.5;
     while (nodeHeight > 0.5 && canvasY < maxCanvasY) {
       let canvasX = canvasXStart + nodeHeight;
       for (let j = 0; j < n; j++) {
@@ -478,7 +480,7 @@ class TreeRenderer extends CanvasRenderer {
         canvasX += nodeWidth;
       }
       n <<= 1;
-      canvasY += nodeHeight*0.75;
+      canvasY += nodeHeight * 0.75;
       nodeHeight *= 0.5;
       nodeWidth *= 0.5;
     }
@@ -489,21 +491,21 @@ class TreeRenderer extends CanvasRenderer {
   static SELECT_LEFT = 2;
   static SELECT_RIGHT = 3;
 
-  static _PATH_COLOR = '#9900dd';
-  static _SELECTED_COLOR = '#0099ff';
-  static _SEED_COLOR = 'grey'
+  static _PATH_COLOR = '#2563EB';
+  static _SELECTED_COLOR = '#2563EB';
+  static _SEED_COLOR = '#999999'
 
   static MIN_NODE_WIDTH = 10;
 
   drawNode(nodeId, canvasXStart, canvasY, nodeWidth, frac, selectionType) {
-    const nodeHeight = nodeWidth*0.5;
-    const canvasX = canvasXStart + nodeWidth/2;
+    const nodeHeight = nodeWidth * 0.5;
+    const canvasX = canvasXStart + nodeWidth / 2;
 
     // Draw the selected branch.
     if (selectionType > TreeRenderer.SELECT_FINAL) {
       this._drawBranch(this._ctx, canvasX, canvasY, nodeHeight,
-                       selectionType == TreeRenderer.SELECT_LEFT ? -1 : 1,
-                       TreeRenderer._PATH_COLOR);
+        selectionType == TreeRenderer.SELECT_LEFT ? -1 : 1,
+        TreeRenderer._PATH_COLOR);
     }
 
     // Draw the fraction.
@@ -518,20 +520,20 @@ class TreeRenderer extends CanvasRenderer {
   }
 
   drawSeedNode(xOffsetRatio, canvasXStart, canvasYMid, nodeWidth, v) {
-    const canvasXMid = canvasXStart + nodeWidth*0.5;
-    const canvasX = canvasXStart + nodeWidth*xOffsetRatio;
+    const canvasXMid = canvasXStart + nodeWidth * 0.5;
+    const canvasX = canvasXStart + nodeWidth * xOffsetRatio;
 
-    const nodeHeight = nodeWidth*0.5;
-    const canvasYSeed = canvasYMid - nodeHeight*0.1;
+    const nodeHeight = nodeWidth * 0.5;
+    const canvasYSeed = canvasYMid - nodeHeight * 0.1;
 
     let ctx = this._ctx;
 
     // Draw the branch.
     ctx.save();
     ctx.strokeStyle = TreeRenderer._SEED_COLOR;
-    ctx.setLineDash([nodeHeight/50]);
+    ctx.setLineDash([nodeHeight / 50]);
 
-    ctx.lineWidth = nodeHeight/100;
+    ctx.lineWidth = nodeHeight / 100;
     ctx.beginPath();
     ctx.moveTo(canvasXMid, canvasYMid);
     ctx.lineTo(canvasX, canvasYSeed);
@@ -550,7 +552,7 @@ class TreeRenderer extends CanvasRenderer {
     let stack = [];
     {
       const nodeWidth = this._treeViewport.nodeWidth();
-      const canvasY = this._treeViewport.yStart() - nodeWidth*0.25;
+      const canvasY = this._treeViewport.yStart() - nodeWidth * 0.25;
 
       // Find all the initial drawing nodes.
       let node = this._treeViewport.referenceNode();
@@ -615,18 +617,18 @@ class TreeRenderer extends CanvasRenderer {
         node.nodeId, canvasXStart, canvasY, nodeWidth, valueFn(node.state), selectionType);
 
 
-      const canvasYLimit = canvasY + nodeWidth*0.25;
+      const canvasYLimit = canvasY + nodeWidth * 0.25;
       if (nodeWidth >= TreeRenderer.MIN_NODE_WIDTH && canvasYLimit <= maxCanvasY) {
         nodeWidth *= 0.5;
-        const canvasXMid = canvasXStart+nodeWidth;
-        canvasY += nodeWidth*0.75;
+        const canvasXMid = canvasXStart + nodeWidth;
+        canvasY += nodeWidth * 0.75;
         if (canvasXMid >= 0) {
-          stack.push([node.clone().goToLeftChild(),  canvasXStart, canvasY, nodeWidth,
-            selectionType === TreeRenderer.SELECT_LEFT && revSelectedPath]);
+          stack.push([node.clone().goToLeftChild(), canvasXStart, canvasY, nodeWidth,
+          selectionType === TreeRenderer.SELECT_LEFT && revSelectedPath]);
         }
         if (canvasXMid < maxCanvasX) {
-          stack.push([node.clone().goToRightChild(), canvasXMid,   canvasY, nodeWidth,
-            selectionType === TreeRenderer.SELECT_RIGHT && revSelectedPath]);
+          stack.push([node.clone().goToRightChild(), canvasXMid, canvasY, nodeWidth,
+          selectionType === TreeRenderer.SELECT_RIGHT && revSelectedPath]);
         }
       }
     }
@@ -639,7 +641,7 @@ class TreeViewport extends BaseEventTarget {
   _referenceNode;
 
   LAYER_WIDTH = 100;
-  LAYER_HEIGHT = this.LAYER_WIDTH/2;
+  LAYER_HEIGHT = this.LAYER_WIDTH / 2;
   DEFAULT_TREE_HEIGHT = 0.8;  // As a percentage of the canvas height.
   MIN_TREE_HEIGHT = 0.4;  // As a percentage of the canvas height.
 
@@ -659,7 +661,7 @@ class TreeViewport extends BaseEventTarget {
     // Don't allow zooming out too far.
     const viewport = this._viewport;
     if (this._referenceNode.depth() == 0
-        && this.nodeWidth() < viewport.maxCanvasY() * this.MIN_TREE_HEIGHT) {
+      && this.nodeWidth() < viewport.maxCanvasY() * this.MIN_TREE_HEIGHT) {
       viewport.allowZoomOut = false;
     } else {
       viewport.allowZoomOut = true;
@@ -675,8 +677,8 @@ class TreeViewport extends BaseEventTarget {
     const treeYMin = this._treeYMin();
     const yMax = viewport.maxCanvasY();
     if (treeYMin < yMax - buffer) {
-      const delta = (yMax - buffer)-treeYMin;
-      viewport.origin.v += delta/viewport.scale;
+      const delta = (yMax - buffer) - treeYMin;
+      viewport.origin.v += delta / viewport.scale;
     }
   }
 
@@ -686,7 +688,7 @@ class TreeViewport extends BaseEventTarget {
 
     // Check if we've moved up enough that we should start at the next layer.
     // Limit scale, so that the initial nodes are not too small.
-    while (viewport.scale > 1 && viewport.origin.v < -this.LAYER_HEIGHT*1.5) {
+    while (viewport.scale > 1 && viewport.origin.v < -this.LAYER_HEIGHT * 1.5) {
       this._referenceNode.goToLeftChild();
 
       // Rescale to the size, keeping the top left corner of the node in the
@@ -701,7 +703,7 @@ class TreeViewport extends BaseEventTarget {
     //   Also do this if our scale is too small, to stay within reasonable
     //   bounds.
     while (this._referenceNode.depth() > 0 && (
-        (viewport.scale < 0.2 || viewport.origin.v > -this.LAYER_HEIGHT))) {
+      (viewport.scale < 0.2 || viewport.origin.v > -this.LAYER_HEIGHT))) {
       const isRightChild = this._referenceNode.isRightChild();
       this._referenceNode.goToParent();
 
@@ -709,10 +711,10 @@ class TreeViewport extends BaseEventTarget {
       // same place.
       viewport.rescale(2, this.xStart(), this.yStart());
       // The parent is now where the child was, so adjust.
-      this._viewport.origin.v -= this.LAYER_HEIGHT*0.5;
+      this._viewport.origin.v -= this.LAYER_HEIGHT * 0.5;
       // If it was a right child, the start needs to be shifted also.
       if (isRightChild) {
-        this._viewport.origin.u += this.LAYER_WIDTH*0.5;
+        this._viewport.origin.u += this.LAYER_WIDTH * 0.5;
       }
     }
 
@@ -731,7 +733,7 @@ class TreeViewport extends BaseEventTarget {
   }
 
   _treeYMin() {
-    return this._viewport.toCanvasY(this.LAYER_HEIGHT*2);
+    return this._viewport.toCanvasY(this.LAYER_HEIGHT * 2);
   }
   treeVisible() {
     return this._treeYMin() > 0;
@@ -748,11 +750,11 @@ class TreeViewport extends BaseEventTarget {
 
   nodeWidth() {
     const viewport = this._viewport;
-    return this.LAYER_WIDTH*viewport.scale;
+    return this.LAYER_WIDTH * viewport.scale;
   }
 
   yStart() {
-    return this._viewport.toCanvasY(this.LAYER_WIDTH*0.5);
+    return this._viewport.toCanvasY(this.LAYER_WIDTH * 0.5);
   }
 
   static _SPATIAL_INDEX_BUCKET_SIZE = 10;
@@ -785,7 +787,7 @@ class TreeViewport extends BaseEventTarget {
 
     // Scale things so that the tree (from the reference node) takes up almost
     // all the screen height.
-    const initialScale = this.DEFAULT_TREE_HEIGHT * height/(this.LAYER_HEIGHT*2);
+    const initialScale = this.DEFAULT_TREE_HEIGHT * height / (this.LAYER_HEIGHT * 2);
 
     // Reset position.
     viewport.scale = initialScale;
@@ -793,14 +795,14 @@ class TreeViewport extends BaseEventTarget {
     viewport.origin.v = 0;
 
     // Center the tree.
-    viewport.origin.u = -viewport.fromCanvasX(width)/2+this.LAYER_WIDTH/2;
+    viewport.origin.u = -viewport.fromCanvasX(width) / 2 + this.LAYER_WIDTH / 2;
   }
 }
 
 class Viewport extends BaseEventTarget {
   // x-y is canvas coordinates.
   // u-v are scaled/world coordinates.
-  origin = {u: 0, v: 0};
+  origin = { u: 0, v: 0 };
   // Larger scale = more zoomed in.
   scale = 1;
 
@@ -860,14 +862,14 @@ class Viewport extends BaseEventTarget {
 
     // Remove offset from origin, so that it will be corretly handled when
     // scaling.
-    origin.u += canvasX/this.scale
-    origin.v -= canvasY/this.scale;
+    origin.u += canvasX / this.scale
+    origin.v -= canvasY / this.scale;
 
     this.scale = this.scale * ds;
 
     // Reoffset origin after scaling.
-    origin.u -= canvasX/this.scale;
-    origin.v += canvasY/this.scale;
+    origin.u -= canvasX / this.scale;
+    origin.v += canvasY / this.scale;
   }
 
   allowZoomOut = true;
@@ -919,22 +921,22 @@ class Viewport extends BaseEventTarget {
   }
 
   toCanvasX(u) {
-    return (u - this.origin.u)*this.scale;
+    return (u - this.origin.u) * this.scale;
   }
   toCanvasY(v) {
-    return (v + this.origin.v)*this.scale;
+    return (v + this.origin.v) * this.scale;
   }
 
   fromCanvasX(canvasX) {
-    return canvasX/this.scale + this.origin.u;
+    return canvasX / this.scale + this.origin.u;
   }
   fromCanvasY(canvasY) {
-    return canvasY/this.scale - this.origin.v;
+    return canvasY / this.scale - this.origin.v;
   }
 
   _canvasOrigin() {
     const bb = this._canvas.getBoundingClientRect();
-    return {x: bb.x, y: bb.y};
+    return { x: bb.x, y: bb.y };
   }
 
   _update() {
@@ -951,13 +953,14 @@ class Viewport extends BaseEventTarget {
       obj = this._spatialIndex.get(canvasX, canvasY);
     }
 
-    return {x: this.fromCanvasX(this.scale*canvasX),
-            y: this.fromCanvasY(this.scale*canvasY),
-            canvasX: canvasX,
-            canvasY: canvasY,
-            scale: this.scale,
-            obj: obj,
-           };
+    return {
+      x: this.fromCanvasX(this.scale * canvasX),
+      y: this.fromCanvasY(this.scale * canvasY),
+      canvasX: canvasX,
+      canvasY: canvasY,
+      scale: this.scale,
+      obj: obj,
+    };
   }
 }
 
@@ -985,7 +988,7 @@ class PointerActionDetector extends BaseEventTarget {
   static _pinchDistance(e) {
     const dx = e.touches[0].clientX - e.touches[1].clientX;
     const dy = e.touches[0].clientY - e.touches[1].clientY;
-    return Math.sqrt(dx*dx+dy*dy);
+    return Math.sqrt(dx * dx + dy * dy);
   }
 
   _setUpWheel(container) {
@@ -1017,7 +1020,7 @@ class PointerActionDetector extends BaseEventTarget {
       dragPos.x = pointer.x;
       dragPos.y = pointer.y;
 
-      this.dispatchEvent('drag', {deltaX: dx, deltaY: dy});
+      this.dispatchEvent('drag', { deltaX: dx, deltaY: dy });
     };
 
     document.addEventListener(moveEvent, dragMove);
@@ -1037,7 +1040,7 @@ class PointerActionDetector extends BaseEventTarget {
 
     const pinchMove = (e) => {
       const newDistance = this.constructor._pinchDistance(e);
-      const delta = newDistance-distance;
+      const delta = newDistance - distance;
       distance = newDistance;
 
       const pointer0 = this.constructor._pointerCoords(e.touches[0]);
@@ -1045,8 +1048,8 @@ class PointerActionDetector extends BaseEventTarget {
 
       this.dispatchEvent('pinch', {
         distance: delta,
-        clientX: (pointer0.x + pointer1.x)/2,
-        clientY: (pointer0.y + pointer1.y)/2,
+        clientX: (pointer0.x + pointer1.x) / 2,
+        clientY: (pointer0.y + pointer1.y) / 2,
       });
     };
 
